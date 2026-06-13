@@ -5,6 +5,7 @@
 import 'package:applens_core/applens_core.dart';
 import 'package:applens_runner/applens_runner.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:stranger_app/cart_model.dart';
@@ -21,7 +22,15 @@ void main() {
     await tester.pumpAndSettle();
 
     final driver = appLensWidgetDriver(tester);
-    final graph = loadGraph('qa_graph');
+    // On-device the host filesystem is unavailable, so load qa_graph from the
+    // bundled assets (declared in pubspec.yaml) into an in-memory file tree.
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    final files = <String, String>{
+      for (final key
+          in manifest.listAssets().where((a) => a.startsWith('qa_graph/')))
+        key: await rootBundle.loadString(key),
+    };
+    final graph = loadGraph('qa_graph', files: MapGraphFiles(files));
     expect(
       validateGraph(graph).where((d) => d.isError),
       isEmpty,

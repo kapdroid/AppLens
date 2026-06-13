@@ -22,3 +22,12 @@ dev_dependencies:
   applens_core: any
   applens_runner: any
   applens_cli: any
+
+# The qa_graph is bundled as assets so on-device runs can load it (the host CLI
+# reads it from the filesystem instead).
+flutter:
+  assets:
+    - qa_graph/applens.yaml
+    - qa_graph/shared/overlays/app_bar.yaml
+    - qa_graph/modules/shop/shop.module.yaml
+    - qa_graph/modules/shop/nodes/

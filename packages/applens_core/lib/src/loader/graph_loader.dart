@@ -1,24 +1,25 @@
-import 'dart:io';
-
 import '../model/graph.dart';
 import '../model/node.dart';
 import '../parse/graph_parser.dart';
 import '../util/source_location.dart';
+import 'graph_files.dart';
 
 /// Loads a graph from a module-mirrored `qa_graph` directory (ARCHITECTURE.md
 /// §5): walks `modules/*/nodes/*.yaml`, assigns hierarchical ids
 /// (`<module>.<file>`), reads each `<module>.module.yaml` manifest for entry
 /// nodes, and resolves `includes:` from `shared/` fragments before returning.
 ///
+/// [files] abstracts file access — the default reads the host filesystem; an
+/// on-device run passes a [MapGraphFiles] of pre-loaded bundled assets.
 /// Composition is resolve-then-validate: fragments are merged into node
 /// identities here, so `validateGraph` still catches an ambiguity introduced by
 /// an included fragment.
-Graph loadGraph(String qaGraphDir) {
-  final modulesDir = Directory('$qaGraphDir/modules');
-  if (!modulesDir.existsSync()) {
+Graph loadGraph(String qaGraphDir, {GraphFiles files = const IoGraphFiles()}) {
+  final modulesDir = '$qaGraphDir/modules';
+  if (!files.exists(modulesDir)) {
     throw GraphParseException(
       'no modules/ directory found',
-      SourceLocation(source: modulesDir.path, line: 1, column: 1),
+      SourceLocation(source: modulesDir, line: 1, column: 1),
     );
   }
 
@@ -26,43 +27,32 @@ Graph loadGraph(String qaGraphDir) {
   final manifests = <ModuleManifest>[];
   final entryNodeIds = <String>[];
 
-  final moduleDirs = modulesDir.listSync().whereType<Directory>().toList()
-    ..sort((a, b) => a.path.compareTo(b.path));
+  for (final moduleDir in files.listDirs(modulesDir)) {
+    final moduleName = _basename(moduleDir);
 
-  for (final moduleDir in moduleDirs) {
-    final moduleName = _basename(moduleDir.path);
-
-    final manifestFile = File('${moduleDir.path}/$moduleName.module.yaml');
-    if (manifestFile.existsSync()) {
+    final manifestPath = '$moduleDir/$moduleName.module.yaml';
+    if (files.exists(manifestPath)) {
       final manifest = parseModuleManifest(
-        manifestFile.readAsStringSync(),
-        source: manifestFile.path,
+        files.read(manifestPath),
+        source: manifestPath,
         moduleName: moduleName,
       );
       manifests.add(manifest);
       entryNodeIds.addAll(manifest.entryNodes);
     }
 
-    final nodesDir = Directory('${moduleDir.path}/nodes');
-    if (!nodesDir.existsSync()) {
+    final nodesDir = '$moduleDir/nodes';
+    if (!files.exists(nodesDir)) {
       continue;
     }
-    final nodeFiles = nodesDir
-        .listSync()
-        .whereType<File>()
-        .where((file) => file.path.endsWith('.yaml'))
-        .toList()
-      ..sort((a, b) => a.path.compareTo(b.path));
+    final nodeFiles =
+        files.listFiles(nodesDir).where((f) => f.endsWith('.yaml'));
 
-    for (final file in nodeFiles) {
-      final base = _basename(file.path).replaceAll(RegExp(r'\.yaml$'), '');
+    for (final path in nodeFiles) {
+      final base = _basename(path).replaceAll(RegExp(r'\.yaml$'), '');
       final id = '$moduleName.$base';
-      var node = parseNode(
-        file.readAsStringSync(),
-        source: file.path,
-        assignedId: id,
-      );
-      node = _resolveIncludes(node, qaGraphDir);
+      var node = parseNode(files.read(path), source: path, assignedId: id);
+      node = _resolveIncludes(node, qaGraphDir, files);
       node = _qualifyEdgeTargets(node, moduleName);
       nodes.add(node);
     }
@@ -71,7 +61,7 @@ Graph loadGraph(String qaGraphDir) {
   return Graph(nodes: nodes, entryNodeIds: entryNodeIds, modules: manifests);
 }
 
-Node _resolveIncludes(Node node, String qaGraphDir) {
+Node _resolveIncludes(Node node, String qaGraphDir, GraphFiles files) {
   if (node.includes.isEmpty) {
     return node;
   }
@@ -81,14 +71,14 @@ Node _resolveIncludes(Node node, String qaGraphDir) {
   final tags = [...node.payload.tags];
 
   for (final ref in node.includes) {
-    final file = File('$qaGraphDir/$ref.yaml');
-    if (!file.existsSync()) {
+    final path = '$qaGraphDir/$ref.yaml';
+    if (!files.exists(path)) {
       throw GraphParseException(
-        'include "$ref" not found at ${file.path}',
+        'include "$ref" not found at $path',
         node.source ?? SourceLocation(source: ref, line: 1, column: 1),
       );
     }
-    final fragment = parseFragment(file.readAsStringSync(), source: file.path);
+    final fragment = parseFragment(files.read(path), source: path);
     for (final anchor in fragment.anchors) {
       if (!anchors.contains(anchor)) {
         anchors.add(anchor);
@@ -128,4 +118,4 @@ Node _qualifyEdgeTargets(Node node, String moduleName) {
   );
 }
 
-String _basename(String path) => path.split(Platform.pathSeparator).last;
+String _basename(String path) => path.split('/').last;
