@@ -3,4 +3,5 @@
 library;
 
 export 'src/driver/driver.dart';
+export 'src/engine/frame_stabilizer.dart';
 export 'src/oracle/oracle.dart';

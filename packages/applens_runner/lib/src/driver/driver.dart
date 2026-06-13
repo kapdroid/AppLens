@@ -1,6 +1,18 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
+/// Thrown by a driver when an action cannot be carried out — a selector matches
+/// nothing or is ambiguous, a tap target is obscured, a scroll target never
+/// appears. Messages are diagnostic: they name what got in the way.
+class DriverException implements Exception {
+  const DriverException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'DriverException: $message';
+}
+
 /// The single seam between AppLens and any UI-driving backend. NOTHING above
 /// this interface may import a concrete driver — enforced by
 /// tool/check_boundaries.dart. v1 ships a first-party engine on Flutter SDK
