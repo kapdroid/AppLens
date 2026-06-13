@@ -14,6 +14,10 @@ export 'src/model/node.dart';
 export 'src/parse/graph_parser.dart';
 export 'src/parse/yaml_writer.dart';
 
+// Path compiler.
+export 'src/plan/path_compiler.dart';
+export 'src/plan/plan.dart';
+
 // Module-mirrored loading.
 export 'src/loader/graph_loader.dart';
 
