@@ -45,6 +45,10 @@ sealed class FlagConstraint {
   /// distinguishable; jointly satisfiable ones do not.
   bool contradicts(FlagConstraint other);
 
+  /// Whether an observed runtime flag [value] (its string form) satisfies this
+  /// constraint — used by the runner to match a live state to a node.
+  bool accepts(String value);
+
   static final RegExp _comparison = RegExp(r'^(>=|<=|==|>|<)\s*(-?\d+)$');
 }
 
@@ -57,6 +61,13 @@ class BoolConstraint extends FlagConstraint {
   @override
   bool contradicts(FlagConstraint other) =>
       other is! BoolConstraint || other.value != value;
+
+  @override
+  bool accepts(String observed) => switch (observed) {
+        'true' => value == true,
+        'false' => value == false,
+        _ => false,
+      };
 }
 
 /// An inclusive integer range, with `null` bounds meaning unbounded.
@@ -81,6 +92,15 @@ class IntRangeConstraint extends FlagConstraint {
     return lo > hi; // Disjoint ranges contradict.
   }
 
+  @override
+  bool accepts(String observed) {
+    final n = int.tryParse(observed);
+    if (n == null) {
+      return false;
+    }
+    return (low == null || n >= low!) && (high == null || n <= high!);
+  }
+
   static int? _max(int? a, int? b) =>
       a == null ? b : (b == null ? a : (a > b ? a : b));
   static int? _min(int? a, int? b) =>
@@ -96,4 +116,7 @@ class ExactConstraint extends FlagConstraint {
   @override
   bool contradicts(FlagConstraint other) =>
       other is! ExactConstraint || other.value != value;
+
+  @override
+  bool accepts(String observed) => observed == value;
 }

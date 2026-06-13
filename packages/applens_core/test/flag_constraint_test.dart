@@ -63,4 +63,25 @@ void main() {
       expect(_c('ready').contradicts(_c('ready')), isFalse);
     });
   });
+
+  group('accepts (runtime match against an observed value)', () {
+    test('integer range accepts in-range values only', () {
+      expect(_c('>0').accepts('3'), isTrue);
+      expect(_c('>0').accepts('0'), isFalse);
+      expect(_c('<=2').accepts('2'), isTrue);
+      expect(_c('<=2').accepts('3'), isFalse);
+      expect(_c('>0').accepts('notanumber'), isFalse);
+    });
+
+    test('booleans accept only their matching literal', () {
+      expect(_c('true').accepts('true'), isTrue);
+      expect(_c('true').accepts('false'), isFalse);
+      expect(_c('false').accepts('nope'), isFalse);
+    });
+
+    test('exact accepts the same literal only', () {
+      expect(_c('ready').accepts('ready'), isTrue);
+      expect(_c('ready').accepts('pending'), isFalse);
+    });
+  });
 }
