@@ -123,8 +123,9 @@ Tasks:
 2. AppLensDriver on SDK APIs: key/semantics selector resolution, hit-test verification before
    tap (rich failure message naming the obscuring widget), tap/long-press/swipe via synthetic
    pointer events, scrollTo as physics-respecting repeated drags with sliver/nested-scrollable
-   handling, enterText via TestTextInput (IME emulation — never key taps), back via
-   handlePopRoute, deep links via platform channel.
+   handling, enterText via TestTextInput (IME emulation — never key taps), back via the root
+   Navigator.maybePop (the public equivalent of the @protected handlePopRoute;
+   on-device back fidelity is revisited at Session 5), deep links via platform channel.
 3. FakeDriver + recorded-tree test harness; unit-test every action's logic headless.
 4. Settle policy incl. consecutive-identical-frames stabilization (frame compare is unit-tested
    with synthetic frame bytes).
