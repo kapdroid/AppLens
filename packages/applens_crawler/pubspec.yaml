@@ -1,0 +1,15 @@
+name: applens_crawler
+description: Exploration engine and draft-graph generation (Phase 4). Stub at Session 0.
+publish_to: none
+version: 0.1.0-dev
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+dependencies:
+  applens_core: any # Workspace-resolved.
+  # applens_runner is added in Session 10, when the crawler actually drives the app.
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

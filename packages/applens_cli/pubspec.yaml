@@ -1,0 +1,23 @@
+name: applens_cli
+description: The AppLens command-line entrypoint — init, validate, plan, run, report. Composition root.
+publish_to: none
+version: 0.1.0-dev
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+# The CLI is the top of the layering and may depend on every package (see
+# docs/SCAFFOLD.md §3). It composes the Flutter packages (applens_runner,
+# applens_compare) by invoking `flutter test` out-of-process — those deps are
+# added in Session 5 when the `run` command lands — so the CLI itself stays a
+# pure-Dart, `dart run`-able binary.
+dependencies:
+  applens_core: any
+  applens_llm: any
+  applens_report: any
+  applens_crawler: any
+  args: ^2.0.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

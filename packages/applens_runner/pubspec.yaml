@@ -1,0 +1,21 @@
+name: applens_runner
+description: Orchestrator, oracle tiers, DriverInterface, and the first-party Flutter-SDK action engine.
+publish_to: none
+version: 0.1.0-dev
+environment:
+  sdk: ^3.6.0
+  flutter: ">=3.27.0"
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  applens_core: any # Workspace-resolved.
+  image: ^4.2.0 # PNG encode/decode for the pixel comparator (Session 6).
+
+dev_dependencies:
+  flutter_lints: ^6.0.0

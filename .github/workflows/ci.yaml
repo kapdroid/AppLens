@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    name: format · analyze · boundaries · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2 # provides flutter + dart; confirm latest
+        with:
+          channel: stable
+      - run: flutter --version
+      - run: dart pub get # resolves the whole pub workspace
+      - run: dart pub global activate melos # melos's exec sugar needs the binary on PATH
+      - run: echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+      - run: melos run ci # format-check → analyze → boundaries → tests (CI=true is set by Actions)

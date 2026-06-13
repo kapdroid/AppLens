@@ -1,0 +1,14 @@
+name: applens_report
+description: Static, dependency-free HTML report generation for AppLens runs.
+publish_to: none
+version: 0.1.0-dev
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+dependencies:
+  applens_core: any # Workspace-resolved.
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

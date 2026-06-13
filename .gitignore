@@ -1,0 +1,26 @@
+# Dart / pub
+.dart_tool/
+.packages
+pubspec.lock
+build/
+doc/api/
+
+# Melos
+.melos_tool/
+
+# Flutter
+.flutter-plugins
+.flutter-plugins-dependencies
+**/ios/Flutter/.last_build_id
+.fvm/
+
+# IDE
+.idea/
+*.iml
+*.iws
+.vscode/
+.DS_Store
+
+# Run artifacts (never committed except the stranger app's intentional fixtures)
+*.log
+coverage/

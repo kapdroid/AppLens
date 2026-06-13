@@ -1,0 +1,15 @@
+name: applens_core
+description: Graph model, schema, validation, path compiler, and the VCS port — the pure-Dart heart of AppLens.
+publish_to: none # Flip to a real publish target at first release.
+version: 0.1.0-dev
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+dependencies:
+  yaml: ^3.1.0
+  collection: ^1.18.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

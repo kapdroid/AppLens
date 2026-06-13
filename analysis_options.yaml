@@ -1,0 +1,36 @@
+# Shared strict ruleset for pure-Dart packages. Each package includes this via
+# `include: ../../analysis_options.yaml`. Flutter packages use
+# analysis_options_flutter.yaml instead, which layers the same strictness on top
+# of flutter_lints. Keep the two analyzer/linter blocks in sync.
+include: package:lints/recommended.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  errors:
+    # Quality violations fail the build rather than merely warn.
+    invalid_annotation_target: error
+    unused_import: error
+    unused_local_variable: error
+    dead_code: error
+    todo: info # Allowed, but surfaced.
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
+linter:
+  rules:
+    - prefer_relative_imports
+    - always_declare_return_types
+    - avoid_dynamic_calls
+    - cancel_subscriptions
+    - close_sinks
+    - only_throw_errors
+    - unawaited_futures
+    - prefer_final_locals
+    - avoid_redundant_argument_values
+    # NOTE: `require_trailing_commas` (in the founding scaffold spec) is omitted:
+    # it is deprecated and conflicts with the Dart 3.7+ formatter, which manages
+    # commas itself. Comma style is enforced by `dart format` via format-check.

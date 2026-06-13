@@ -1,0 +1,84 @@
+name: applens_workspace
+publish_to: none
+environment:
+  sdk: ^3.9.0
+
+# Pub workspace (Dart 3.6+): the native multi-package mechanism. `dart pub get`
+# at the root resolves every member below into one shared lockfile and
+# package_config. Melos rides on top purely for cross-package scripting.
+workspace:
+  - packages/applens_core
+  - packages/applens_llm
+  - packages/applens_runner
+  - packages/applens_compare
+  - packages/applens_report
+  - packages/applens_crawler
+  - packages/applens_sdk
+  - packages/applens_cli
+  - examples/stranger_app
+
+dev_dependencies:
+  melos: ^7.0.0
+  lints: ^6.0.0
+  test: ^1.25.0
+
+# Melos 7 reads its configuration from this `melos:` block (the workspace root
+# pubspec) rather than a standalone melos.yaml. Scripts only — bootstrap is
+# `dart pub get`. Analyze and test are split by package kind: Flutter packages
+# need `flutter analyze`/`flutter test` (dart:ui is engine-provided), pure-Dart
+# packages use the Dart toolchain, and the workspace-root tooling (the boundary
+# checker under tool/ + its tests under test/) is handled by the `*-tooling`
+# scripts since melos does not iterate the root package itself.
+melos:
+  scripts:
+    analyze-dart:
+      description: Analyze pure-Dart member packages.
+      exec: dart analyze --fatal-infos
+      packageFilters:
+        flutter: false
+    analyze-flutter:
+      description: Analyze Flutter member packages.
+      exec: flutter analyze --fatal-infos
+      packageFilters:
+        flutter: true
+    analyze-tooling:
+      description: Analyze the workspace tooling (boundary checker + its tests).
+      run: dart analyze --fatal-infos tool test
+    analyze:
+      description: Static analysis across everything; infos treated as failures.
+      run: melos run analyze-tooling && melos run analyze-dart && melos run analyze-flutter
+
+    format-check:
+      description: Fail if any file is not formatted.
+      run: dart format --output=none --set-exit-if-changed .
+
+    boundaries:
+      description: Enforce architectural import boundaries (see docs/SCAFFOLD.md §5).
+      run: dart run tool/check_boundaries.dart
+
+    test-tooling:
+      description: Run the boundary checker's unit tests (workspace root).
+      run: dart test
+    test-dart:
+      description: Run pure-Dart member package tests.
+      exec: dart test
+      packageFilters:
+        flutter: false
+        dirExists: test
+    test-flutter:
+      description: Run Flutter member package tests.
+      exec: flutter test
+      packageFilters:
+        flutter: true
+        dirExists: test
+    test:
+      description: Run every test (tooling, pure-Dart, Flutter).
+      run: melos run test-tooling && melos run test-dart && melos run test-flutter
+
+    ci:
+      description: Full headless gate — format, analyze, boundaries, tests.
+      run: >
+        melos run format-check &&
+        melos run analyze &&
+        melos run boundaries &&
+        melos run test

@@ -1,0 +1,14 @@
+name: applens_llm
+description: Provider-agnostic LlmProvider port and adapters (Claude, OpenAI, Manual) for the AI sidecar.
+publish_to: none
+version: 0.1.0-dev
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+dependencies:
+  http: ^1.0.0 # Used by the network-backed adapters (Session 8.5).
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0
