@@ -15,6 +15,7 @@ dependencies:
   integration_test:
     sdk: flutter
   applens_core: any # Workspace-resolved.
+  applens_compare: any # Workspace-resolved; tier-3 reuses its VisualComparator (no fork).
   crypto: ^3.0.0 # sha256 for the tier-2 layout hash (same family as core content-addressing).
   image: ^4.2.0 # PNG encode/decode for the pixel comparator (Session 6).
 

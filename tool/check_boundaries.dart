@@ -20,7 +20,7 @@ import 'dart:io';
 const Map<String, Set<String>> allowedDeps = {
   'applens_core': <String>{},
   'applens_llm': {'applens_core'},
-  'applens_runner': {'applens_core'},
+  'applens_runner': {'applens_core', 'applens_compare'},
   'applens_compare': <String>{},
   'applens_crawler': {'applens_core', 'applens_runner'},
   'applens_report': {'applens_core'},

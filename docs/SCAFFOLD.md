@@ -118,7 +118,7 @@ Layering (who may depend on whom):
 ```
 applens_core      → (nothing internal)        pure model, compiler, validate
 applens_llm       → applens_core              provider port + adapters
-applens_runner    → applens_core              driver iface, oracles, run loop  [Flutter]
+applens_runner    → applens_core, applens_compare  driver iface, oracles, run loop  [Flutter]
 applens_compare   → (nothing internal)        standalone golden comparator     [Flutter]
 applens_crawler   → applens_core, applens_runner
 applens_report    → applens_core              static HTML generation
