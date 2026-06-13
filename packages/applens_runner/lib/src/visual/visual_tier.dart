@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:applens_compare/applens_compare.dart';
 import 'package:applens_core/applens_core.dart';
-import 'package:image/image.dart' as img;
 
 import '../driver/driver.dart';
 
@@ -19,10 +18,10 @@ class VisualTierResult {
 }
 
 /// Compares a freshly captured screen against its approved baseline using the
-/// standalone [VisualComparator] (ARCHITECTURE.md §8). The [actual] capture is
-/// straight-RGBA from the device; it is PNG-encoded here so both sides share the
-/// comparator's PNG-in contract. Masks and per-node thresholds are baked into
-/// [comparator] by the caller (resolved from the node's [VisualBaseline]).
+/// standalone [VisualComparator] (ARCHITECTURE.md §8). Both [actual] and the
+/// baseline are PNG bytes, so they feed the comparator's PNG-in contract
+/// directly. Masks and per-node thresholds are baked into [comparator] by the
+/// caller (resolved from the node's [VisualBaseline]).
 ///
 /// A node with no approved baseline yields a *skipped* result — never a silent
 /// pass or fail; recording that baseline is the proposal workflow's job (§9).
@@ -44,19 +43,7 @@ VisualTierResult evaluateTier3({
     );
   }
 
-  final actualPng = Uint8List.fromList(
-    img.encodePng(
-      img.Image.fromBytes(
-        width: actual.width,
-        height: actual.height,
-        bytes: Uint8List.fromList(actual.bytes).buffer,
-        numChannels: 4,
-        order: img.ChannelOrder.rgba,
-      ),
-    ),
-  );
-
-  final verdict = comparator.compare(actualPng, baselinePng);
+  final verdict = comparator.compare(actual.pngBytes, baselinePng);
   return VisualTierResult(
     assertion: AssertionResult(
       tierOrder: tier3Order,

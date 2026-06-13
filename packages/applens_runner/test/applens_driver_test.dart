@@ -2,6 +2,7 @@ import 'package:applens_runner/applens_runner.dart';
 import 'package:applens_runner/src/driver/applens_driver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 
 Widget _harness(Widget child) => MaterialApp(home: Scaffold(body: child));
 
@@ -138,5 +139,50 @@ void main() {
       driver.tap(const KeySelector('nope')),
       throwsA(isA<DriverException>()),
     );
+  });
+
+  // toImage/toByteData only resolve inside runAsync under the automated test
+  // binding; on a device (integration_test's live binding, where the
+  // orchestrator calls capture) they resolve without it.
+  testWidgets('capture(FullScreenScope) returns a decodable PNG of the screen',
+      (tester) async {
+    await tester.pumpWidget(_harness(const Center(child: Text('hi'))));
+    final driver = AppLensWidgetDriver(tester);
+
+    final capture =
+        (await tester.runAsync(() => driver.capture(const FullScreenScope())))!;
+
+    expect(capture.pngBytes, isNotEmpty);
+    expect(capture.width, greaterThan(0));
+    final decoded = img.decodePng(capture.pngBytes);
+    expect(decoded, isNotNull);
+    expect(decoded!.width, capture.width);
+    expect(decoded.height, capture.height);
+  });
+
+  testWidgets('capture(WidgetScope) crops to the keyed widget, not the screen',
+      (tester) async {
+    await tester.pumpWidget(
+      _harness(
+        Center(
+          child: SizedBox(
+            key: const Key('box'),
+            width: 60,
+            height: 40,
+            child: const ColoredBox(color: Color(0xFF2244AA)),
+          ),
+        ),
+      ),
+    );
+    final driver = AppLensWidgetDriver(tester);
+
+    final full =
+        (await tester.runAsync(() => driver.capture(const FullScreenScope())))!;
+    final cropped = (await tester.runAsync(
+        () => driver.capture(const WidgetScope(KeySelector('box')))))!;
+
+    expect(cropped.width, lessThan(full.width));
+    expect(cropped.height, lessThan(full.height));
+    expect(img.decodePng(cropped.pngBytes), isNotNull);
   });
 }

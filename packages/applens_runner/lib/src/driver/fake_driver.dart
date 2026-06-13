@@ -66,7 +66,7 @@ class FakeDriver implements AppLensDriver {
   @override
   Future<Capture> capture(CaptureScope scope) async {
     actionLog.add('capture');
-    return _capture ?? Capture(bytes: Uint8List(0), width: 0, height: 0);
+    return _capture ?? Capture(pngBytes: Uint8List(0), width: 0, height: 0);
   }
 
   @override

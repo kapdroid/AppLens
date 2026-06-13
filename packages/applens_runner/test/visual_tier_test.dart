@@ -33,7 +33,7 @@ Uint8List _png(int w, int h, int r, int g, int b) => Uint8List.fromList(
     );
 
 Capture _capture(int w, int h, int r, int g, int b) =>
-    Capture(bytes: _rgba(w, h, r, g, b), width: w, height: h);
+    Capture(pngBytes: _png(w, h, r, g, b), width: w, height: h);
 
 void main() {
   test('a capture matching its baseline passes tier 3', () {

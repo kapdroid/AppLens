@@ -114,16 +114,19 @@ class SerializedWidget {
   final List<SerializedWidget> children;
 }
 
-/// A captured image in straight (un-premultiplied) RGBA byte order — the layout
-/// the pixelmatch port expects (docs/ARCHITECTURE.md §8).
+/// A captured image as PNG bytes — the format baselines are stored in and the
+/// comparator consumes directly. Capturing to PNG (via the engine's encoder)
+/// yields straight, un-premultiplied alpha, sidestepping the premultiplied
+/// `rawRgba` trap of `ui.Image.toByteData` (docs/ARCHITECTURE.md §8). [width]
+/// and [height] are the captured pixel dimensions, for the report.
 class Capture {
   const Capture({
-    required this.bytes,
+    required this.pngBytes,
     required this.width,
     required this.height,
   });
 
-  final Uint8List bytes;
+  final Uint8List pngBytes;
   final int width;
   final int height;
 }

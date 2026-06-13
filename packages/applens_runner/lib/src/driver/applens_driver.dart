@@ -1,5 +1,9 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 
 import 'driver.dart';
 import 'selector_resolver.dart';
@@ -114,9 +118,64 @@ class AppLensWidgetDriver implements AppLensDriver {
 
   @override
   Future<Capture> capture(CaptureScope scope) async {
-    throw UnimplementedError(
-      'capture() is wired up in Session 7 (capture.dart): stabilized, scoped '
-      'capture with masks. The action engine (Session 3) does not grab pixels.',
+    if (scope is RegionScope) {
+      throw const DriverException(
+        'RegionScope capture is not derived in v1: scopes are full-screen or '
+        'crop-to-widget (see deriveCaptureScope)',
+      );
+    }
+
+    // Render the root repaint boundary's layer and encode to PNG — straight
+    // (un-premultiplied) alpha, avoiding the premultiplied rawRgba trap of
+    // ui.Image.toByteData (ARCHITECTURE.md §8). captureImage renders at logical
+    // resolution, so logical widget rects map 1:1 onto image pixels.
+    final root = WidgetsBinding.instance.rootElement;
+    if (root == null) {
+      throw const DriverException('no widget tree is mounted to capture');
+    }
+    final image = await captureImage(root);
+    final Uint8List fullPng;
+    final int fullWidth;
+    final int fullHeight;
+    try {
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (png == null) {
+        throw const DriverException('capture produced no image bytes');
+      }
+      fullPng = png.buffer.asUint8List();
+      fullWidth = image.width;
+      fullHeight = image.height;
+    } finally {
+      image.dispose();
+    }
+
+    if (scope is FullScreenScope) {
+      return Capture(pngBytes: fullPng, width: fullWidth, height: fullHeight);
+    }
+
+    // WidgetScope: crop the full capture to the widget's rect. Cropping the
+    // decoded image (rather than layer.toImage on a sub-rect, which deadlocks
+    // the headless test binding) keeps an overlay's crop clear of the barrier.
+    final selector = (scope as WidgetScope).selector;
+    final finder = resolveSelector(selector);
+    _ensureSingle(finder, selector);
+    final rect = tester.getRect(finder);
+    final decoded = img.decodePng(fullPng)!;
+    final left = rect.left.round().clamp(0, decoded.width);
+    final top = rect.top.round().clamp(0, decoded.height);
+    final width = rect.width.round().clamp(1, decoded.width - left);
+    final height = rect.height.round().clamp(1, decoded.height - top);
+    final cropped = img.copyCrop(
+      decoded,
+      x: left,
+      y: top,
+      width: width,
+      height: height,
+    );
+    return Capture(
+      pngBytes: Uint8List.fromList(img.encodePng(cropped)),
+      width: cropped.width,
+      height: cropped.height,
     );
   }
 
