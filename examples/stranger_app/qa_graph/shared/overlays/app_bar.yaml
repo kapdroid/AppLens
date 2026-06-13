@@ -1,0 +1,8 @@
+# A shared app bar present across screens — defined once and composed into
+# nodes via `includes:` rather than copied. Proves composition (ARCHITECTURE §5).
+identity:
+  anchors: [app_bar]
+payload:
+  assertions:
+    - { type: widget_exists, key: app_bar }
+  tags: [has_app_bar]

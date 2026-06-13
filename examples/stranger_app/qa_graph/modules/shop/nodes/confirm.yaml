@@ -1,0 +1,9 @@
+identity:
+  route: /confirm
+  anchors: [lbl_order_confirmed, btn_back_home]
+payload:
+  assertions:
+    - { type: widget_exists, key: lbl_order_confirmed }
+  edges:
+    - { action: tap, key: btn_back_home, target: dashboard }
+  tags: [shopping]

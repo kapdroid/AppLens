@@ -1,0 +1,4 @@
+# Module manifest: ownership, tags, and entry nodes (ARCHITECTURE.md §5).
+owner: team-shop
+tags: [shopping]
+entry_nodes: [dashboard]

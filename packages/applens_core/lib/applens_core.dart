@@ -2,4 +2,27 @@
 /// and the version-control port. Depends on no other AppLens package.
 library;
 
+// Graph model.
+export 'src/model/assertion.dart';
+export 'src/model/edge.dart';
+export 'src/model/edge_action.dart';
+export 'src/model/flag_constraint.dart';
+export 'src/model/graph.dart';
+export 'src/model/node.dart';
+
+// YAML parsing and serialization.
+export 'src/parse/graph_parser.dart';
+export 'src/parse/yaml_writer.dart';
+
+// Module-mirrored loading.
+export 'src/loader/graph_loader.dart';
+
+// Validation.
+export 'src/validate/diagnostic.dart';
+export 'src/validate/validator.dart';
+
+// Shared.
+export 'src/util/source_location.dart';
+
+// Version-control port (Session 0 contract).
 export 'src/vcs/vcs_adapter.dart';

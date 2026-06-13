@@ -1,0 +1,15 @@
+# The filled-cart state — distinguished from an empty cart by cart_count > 0.
+identity:
+  route: /cart
+  anchors: [list_cart_items, btn_place_order, lbl_total]
+  flags: { cart_count: ">0" }
+payload:
+  assertions:
+    - { type: widget_exists, key: btn_place_order }
+    - { type: text_equals, key: lbl_total, source: computed }
+  edges:
+    - { action: tap, key: btn_place_order, target: confirm }
+    - { action: back, target: catalog }
+  guards: { requires: [journey.started] }
+  tags: [sanity, shopping]
+  owner: team-shop
