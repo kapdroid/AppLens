@@ -99,11 +99,18 @@ class SerializedWidget {
   const SerializedWidget({
     required this.type,
     this.key,
+    this.rect,
     this.children = const <SerializedWidget>[],
   });
 
   final String type;
   final String? key;
+
+  /// Painted bounds in global logical pixels, when this node is backed by a
+  /// sized box; null for non-box render objects (e.g. slivers). Feeds the
+  /// tier-2 relative-geometry buckets (docs/ARCHITECTURE.md §8).
+  final Rect? rect;
+
   final List<SerializedWidget> children;
 }
 

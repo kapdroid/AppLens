@@ -10,6 +10,9 @@ List<String> _keysOf(SerializedWidget node) => [
       for (final child in node.children) ..._keysOf(child),
     ];
 
+bool _anyHasRect(SerializedWidget node) =>
+    node.rect != null || node.children.any(_anyHasRect);
+
 void main() {
   testWidgets('tap invokes the keyed widget', (tester) async {
     var tapped = false;
@@ -123,6 +126,8 @@ void main() {
     final snapshot = await driver.tree();
 
     expect(_keysOf(snapshot.root), contains('lbl'));
+    // Box-backed nodes carry painted geometry — the tier-2 layout hash needs it.
+    expect(_anyHasRect(snapshot.root), isTrue);
   });
 
   testWidgets('a missing selector throws', (tester) async {

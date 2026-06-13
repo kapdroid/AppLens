@@ -198,8 +198,21 @@ class AppLensWidgetDriver implements AppLensDriver {
     return SerializedWidget(
       type: element.widget.runtimeType.toString(),
       key: _keyOf(element),
+      rect: _rectOf(element),
       children: children,
     );
+  }
+
+  /// Global painted bounds for box-backed elements; null for non-box render
+  /// objects so the tier-2 layout hash can bucket only real geometry.
+  Rect? _rectOf(Element element) {
+    final renderObject = element.renderObject;
+    if (renderObject is RenderBox &&
+        renderObject.hasSize &&
+        renderObject.attached) {
+      return renderObject.localToGlobal(Offset.zero) & renderObject.size;
+    }
+    return null;
   }
 
   String? _keyOf(Element element) {

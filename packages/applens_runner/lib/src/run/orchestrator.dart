@@ -4,6 +4,7 @@ import '../driver/driver.dart';
 import 'fingerprint.dart';
 import 'node_matcher.dart';
 import 'tier1.dart';
+import 'tier2.dart';
 
 /// Walks a compiled plan against a driver, fingerprinting each state, matching
 /// it to the expected node, running tier-1 assertions, and recording the
@@ -117,6 +118,16 @@ class Orchestrator {
   ) async {
     final node = graph.byId[expected]!;
     final assertions = evaluateTier1(node, fingerprint);
+    final tier1Failed = assertions.any((a) => !a.skipped && !a.passed);
+
+    // Cheap-to-expensive: descend to the tier-2 layout hash only when tier 1
+    // held (the default short-circuit, ARCHITECTURE.md §8) and the node opts in
+    // with a layout_hash assertion. The tree is the more expensive observation,
+    // so it is fetched only when a tier-2 check will actually use it.
+    if (!tier1Failed && _wantsTier2(node)) {
+      assertions.addAll(evaluateTier2(node, await driver.tree()));
+    }
+
     final failed = assertions.any((a) => !a.skipped && !a.passed);
     return NodeVisit(
       step: step,
@@ -127,6 +138,9 @@ class Orchestrator {
       artifacts: failed ? await _artifacts() : const [],
     );
   }
+
+  bool _wantsTier2(Node node) =>
+      node.payload.assertions.any((a) => a.type == 'layout_hash');
 
   Future<int?> _reroute(
     Graph graph,

@@ -1,6 +1,9 @@
+import 'dart:ui' show Rect;
+
 import 'package:applens_core/applens_core.dart';
 import 'package:applens_runner/applens_runner.dart';
 import 'package:applens_runner/src/driver/fake_driver.dart';
+import 'package:applens_runner/src/run/tier2.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A scripted [FingerprintSource]: returns each fingerprint in order, clamping
@@ -174,6 +177,93 @@ void main() {
     ]);
     expect(record.visits[2].expectedNodeId, 'C');
     expect(record.visits[2].matchedNodeId, isNull);
+  });
+
+  group('tier 2 (layout hash) wired into the loop', () {
+    final observed = WidgetTreeSnapshot(
+      SerializedWidget(
+        type: 'Root',
+        rect: const Rect.fromLTWH(0, 0, 1200, 1200),
+        children: const [
+          SerializedWidget(type: 'Text', rect: Rect.fromLTWH(0, 0, 100, 40)),
+        ],
+      ),
+    );
+
+    Graph graphWithB(List<Assertion> bAssertions) => Graph(
+          nodes: [
+            _node('A', '/a'),
+            _node('B', '/b', assertions: bAssertions),
+          ],
+          entryNodeIds: ['A'],
+        );
+
+    final toB = _plan([
+      PlanPath(start: 'A', steps: [_tap('B', 'k_ab')]),
+    ]);
+
+    test('matching layout hash passes as a tier-2 assertion', () async {
+      final baseline = layoutHash(observed);
+      final record = await _orchestrator(
+        FakeDriver(trees: [observed]),
+        [_fpA, _fpBpass],
+      ).run(
+        graphWithB([
+          _exists('b_btn'),
+          Assertion(type: 'layout_hash', args: {'value': baseline}),
+        ]),
+        toB,
+      );
+
+      expect(record.visits[1].outcome, NodeOutcome.passed);
+      final tier2 = record.visits[1].assertions
+          .where((a) => a.tierOrder == tier2Order)
+          .toList();
+      expect(tier2, hasLength(1));
+      expect(tier2.single.passed, isTrue);
+    });
+
+    test('drifted layout hash is a soft fail', () async {
+      final record = await _orchestrator(
+        FakeDriver(trees: [observed]),
+        [_fpA, _fpBpass],
+      ).run(
+        graphWithB([
+          _exists('b_btn'),
+          const Assertion(type: 'layout_hash', args: {'value': 'sha256:old'}),
+        ]),
+        toB,
+      );
+
+      expect(record.visits[1].outcome, NodeOutcome.failedSoft);
+      expect(
+        record.visits[1].assertions
+            .singleWhere((a) => a.tierOrder == tier2Order)
+            .passed,
+        isFalse,
+      );
+    });
+
+    test('a tier-1 failure short-circuits the tier-2 layout hash', () async {
+      final baseline = layoutHash(observed);
+      final record = await _orchestrator(
+        FakeDriver(trees: [observed]),
+        [_fpA, _fpBfail], // missing b_btn anchor → tier 1 fails
+      ).run(
+        graphWithB([
+          _exists('b_btn'),
+          Assertion(type: 'layout_hash', args: {'value': baseline}),
+        ]),
+        toB,
+      );
+
+      expect(record.visits[1].outcome, NodeOutcome.failedSoft);
+      // Tier 2 never ran — no layout-hash result recorded.
+      expect(
+        record.visits[1].assertions.any((a) => a.tierOrder == tier2Order),
+        isFalse,
+      );
+    });
   });
 
   test('same graph + plan run twice → identical visit sequence', () async {
