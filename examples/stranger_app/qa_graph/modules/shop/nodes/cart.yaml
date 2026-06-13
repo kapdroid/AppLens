@@ -11,5 +11,5 @@ payload:
     - { action: tap, key: btn_place_order, target: confirm }
     - { action: back, target: catalog }
   guards: { requires: [journey.started] }
-  tags: [sanity, shopping]
+  tags: [shopping]
   owner: team-shop

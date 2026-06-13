@@ -8,4 +8,4 @@ payload:
   edges:
     - { action: tap, key: product_0, target: product }
     - { action: back, target: dashboard }
-  tags: [shopping]
+  tags: [shopping, sanity]

@@ -1,6 +1,17 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:flutter_test/flutter_test.dart';
+
+import 'applens_driver.dart';
+
+/// Constructs the first-party widget driver for [tester]. The concrete class
+/// stays internal (never barrel-exported, per tool/check_boundaries.dart); the
+/// generated entrypoint depends only on this factory and the [AppLensDriver]
+/// interface it returns.
+AppLensDriver appLensWidgetDriver(WidgetTester tester) =>
+    AppLensWidgetDriver(tester);
+
 /// Thrown by a driver when an action cannot be carried out — a selector matches
 /// nothing or is ambiguous, a tap target is obscured, a scroll target never
 /// appears. Messages are diagnostic: they name what got in the way.

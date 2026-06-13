@@ -11,7 +11,7 @@ class OrderConfirmScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Order')),
+      appBar: AppBar(key: const Key('app_bar'), title: const Text('Order')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

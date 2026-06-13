@@ -14,7 +14,7 @@ class CatalogScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final catalog = buildCatalog();
     return Scaffold(
-      appBar: AppBar(title: const Text('Catalog')),
+      appBar: AppBar(key: const Key('app_bar'), title: const Text('Catalog')),
       body: ListView.builder(
         key: const Key('list_catalog'),
         itemCount: catalog.length,

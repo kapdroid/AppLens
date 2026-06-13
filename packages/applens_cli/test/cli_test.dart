@@ -59,7 +59,7 @@ void main() {
       'sanity',
     ]);
     expect(code, 0);
-    expect(output, contains('shop.cart'));
+    expect(output, contains('shop.dashboard'));
   });
 
   test('graph path shows a shortest path', () async {

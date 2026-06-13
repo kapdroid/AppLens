@@ -16,7 +16,7 @@ class ProductDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final cart = CartScope.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Product')),
+      appBar: AppBar(key: const Key('app_bar'), title: const Text('Product')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

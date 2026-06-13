@@ -13,7 +13,7 @@ class CartScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final cart = CartScope.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Cart')),
+      appBar: AppBar(key: const Key('app_bar'), title: const Text('Cart')),
       body: cart.items.isEmpty
           ? const Center(
               child: Text('Your cart is empty', key: Key('lbl_empty_cart')),

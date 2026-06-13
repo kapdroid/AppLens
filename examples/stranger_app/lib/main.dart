@@ -16,15 +16,18 @@ void main() {
 /// The stranger app root. The cart is injected so tests (and, later, AppLens
 /// seed hooks) can start from a known state.
 class StrangerApp extends StatelessWidget {
-  const StrangerApp({super.key, required this.cart});
+  const StrangerApp(
+      {super.key, required this.cart, this.navigatorObservers = const []});
 
   final CartModel cart;
+  final List<NavigatorObserver> navigatorObservers;
 
   @override
   Widget build(BuildContext context) {
     return CartScope(
       cart: cart,
       child: MaterialApp(
+        navigatorObservers: navigatorObservers,
         title: 'Stranger Shop',
         theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true),
         initialRoute: HomeScreen.route,

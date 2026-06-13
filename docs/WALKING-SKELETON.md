@@ -16,20 +16,20 @@ results.
 These were cited with `file:line`; the device-design ones are fixed, the rest
 need a device to close:
 
-1. **stranger entrypoint + graph reconciliation (the big one).** The stranger app
-   has no `integration_test/applens_entry.dart` and no `applens_runner` dev-dep,
-   so the nightly has nothing to run. Adding them also requires reconciling the
-   graph with v1's capabilities:
-   - The `shop.dashboard` node's identity includes anchor `app_bar` (from the
-     shared fragment), but the app has no widget keyed `app_bar` — add
-     `key: const Key('app_bar')` to each Scaffold's AppBar, or drop it from
-     identity.
-   - The `shop.cart` node's identity requires flag `cart_count > 0`, but v1 does
-     **not** observe flags (SDK introspection is the Tier-1 SDK, a later session).
-     Until then, a flag-gated node can never match. For the v1 skeleton, retag
-     smoke coverage onto flag-free nodes (e.g. `dashboard`, `catalog`) or model a
-     `cart_empty` node, so the smoke plan walks a path the runner can actually
-     match.
+1. **stranger entrypoint + graph reconciliation — DONE, proven headless.**
+   `examples/stranger_app/integration_test/applens_entry.dart` (device variant)
+   and `test/walking_skeleton_test.dart` (headless) now walk the smoke plan
+   end-to-end against the real app; the app declares the AppLens dev-deps and an
+   `applens.yaml`. The graph was reconciled with v1: every Scaffold AppBar got
+   `Key('app_bar')` (so the shared-fragment anchor matches), and smoke coverage
+   was retagged onto flag-free nodes (`dashboard`, `catalog`) because v1 does not
+   yet observe flags — `shop.cart`'s `cart_count > 0` identity needs SDK
+   introspection (a later session), so it stays out of smoke for now.
+   `flutter test test/walking_skeleton_test.dart` passes: dashboard + catalog
+   matched/passed and `product_40` scrolled into the long list. **The remaining
+   step is running the same walk on a real emulator** via
+   `flutter test integration_test/applens_entry.dart -d <device>`, which needs
+   the app's Android platform folder (`flutter create --platforms=android .`).
 2. **On-device graph/plan bundling + `run.db` transfer.** `loadGraph('qa_graph')`
    and `SqliteRunStore.open('build/applens/run.db')` use host paths; under
    on-device `integration_test` the app process can't read host files and writes

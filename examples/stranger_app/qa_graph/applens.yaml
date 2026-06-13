@@ -1,0 +1,7 @@
+# AppLens configuration for the stranger app.
+app_id: com.applens.stranger_app # device applicationId, for permission pre-grants.
+device_profiles:
+  - { device: pixel6, locale: en, theme: light }
+strategies: [smoke, regression]
+permissions: [] # the stranger app needs none — the zero-special-access proof.
+modules: {}
