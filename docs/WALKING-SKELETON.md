@@ -4,12 +4,15 @@ The headless spine of Session 5 is built and green (`melos run ci`): the CLI
 (`validate`/`plan`/`graph`/`report`/`init`/`run`), the HTML report + graph render
 engine, `WidgetFingerprintSource`, the GitHub Action, and the nightly workflow.
 
-**The gate is not yet met.** Session 5's acceptance gate (BUILD-PLAN §3) is the
-walking skeleton: *a human runs the README on the stranger app, and the nightly
-workflow is green two consecutive nights in GitHub Actions, with one node
-scrolling into a long list.* That needs a real emulator/device and a real GitHub
-repo — it is the human checkpoint, and the constitution forbids inventing device
-results.
+**On-device run: PASSING.** `flutter test integration_test/applens_entry.dart -d
+emulator-5554` is green on a real Android emulator (API 37): AppLens loads the
+graph from bundled assets, compiles the smoke plan, walks the real StrangerApp
+(dashboard + catalog match and pass), and scrolls `product_40` into the long
+list. The graph-bundling, app-id, and device-targeting blockers are closed.
+
+**The gate is still not fully met.** Session 5's acceptance gate (BUILD-PLAN §3)
+also requires the **nightly workflow green two consecutive nights in GitHub
+Actions** — that needs a real repo + CI runs, the remaining human checkpoint.
 
 ## Open blockers before the gate can pass (from the mobile-platform review)
 
@@ -68,4 +71,13 @@ open build/applens/report.html                             # expect: green, 1 no
 
 Expected: `validate` exits 0; `run` walks the smoke plan on the device; `report`
 exits 0 (green). Then push and watch `.github/workflows/nightly.yaml` go green two
-nights running. Until all of the above holds, **no Phase 2 work starts.**
+nights running. Until that CI evidence holds, **no Phase 2 work starts.**
+
+## Status
+
+- ✅ On-device walk (entrypoint, InMemoryRunStore) green on emulator-5554.
+- ◻ `applens run` CLI path on device: writes a SQLite run store, so it needs
+  `sqlite3_flutter_libs` bundled and an `adb pull` of `run.db` before `report`
+  (the entrypoint walk above sidesteps this by using InMemoryRunStore).
+- ◻ Nightly green two consecutive nights in real GitHub Actions (needs a repo).
+- ◻ iOS `simctl` pre-grant path; `settle()` hardening for continuous animations.
