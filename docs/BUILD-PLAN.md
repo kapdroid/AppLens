@@ -166,13 +166,21 @@ list. Until this gate passes, no Phase 2 work starts.
 ### Session 6 — Pixel comparator (applens_runner/visual + applens_compare)
 Tasks:
 1. Port mapbox/pixelmatch test fixtures FIRST; then the algorithm (YIQ delta, AA detection)
-   until fixtures pass byte-identically. Attribution per MIT.
+   until fixtures pass byte-identically. Attribution per ISC.
 2. comparator.dart: widget-key masks applied to both images, dual thresholds, VisualVerdict
-   with red diff PNG. Watch the RGBA byte-format trap (ui.Image rawStraightRgba).
+   with red diff PNG. Watch the RGBA byte-format trap: on-device captures from
+   ui.Image.toByteData() are premultiplied rawRgba (no rawStraightRgba format exists), so
+   Session 7 must reach this comparator via PNG encode; the algorithm expects straight RGBA.
 3. applens_compare: GoldenFileComparator implementation; its own README; standalone package
    usable with zero AppLens knowledge.
-Acceptance gate: upstream fixtures pass; applens_compare drops into a plain flutter_test golden
-suite in the stranger app and tolerates a 1-pixel AA difference that the default comparator fails.
+Acceptance gate: upstream fixtures pass; applens_compare is a drop-in GoldenFileComparator that
+tolerates a sub-threshold AA difference the default exact comparator rejects — proven at the
+fixture level (a byte-different mapbox pair the stock GoldenFileComparator.compareLists rejects
+while our drop-in passes), with the negative control executed. Deliberately NOT proven via a live
+widget golden in the stranger app: a macOS-authored widget golden re-run on Linux CI diverges by
+font hinting / subpixel AA far beyond one pixel (and Flutter enforces host-only goldens), which
+would make the gate flaky for reasons unrelated to the comparator. The 2-line stranger-app
+adoption is documented in applens_compare/README.md.
 
 ### Session 7 — Capture, tier 2/3, baseline recording
 Tasks:

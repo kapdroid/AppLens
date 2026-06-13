@@ -5,6 +5,10 @@
 /// (docs/ARCHITECTURE.md §8).
 library;
 
+export 'src/comparator.dart';
+export 'src/golden_comparator.dart';
+export 'src/pixelmatch.dart';
+
 /// Default overall diff ratio over unmasked pixels above which a golden fails.
 const double defaultDiffRatioThreshold = 0.001;
 
