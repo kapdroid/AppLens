@@ -1,0 +1,55 @@
+name: AppLens Run
+description: >
+  Validate the graph, compile a plan, run it (the caller supplies the emulator),
+  render the HTML report, and upload it. Comment the summary on a PR.
+
+inputs:
+  qa-graph:
+    description: Path to the qa_graph directory.
+    default: qa_graph
+  strategy:
+    description: Plan strategy (smoke | regression).
+    default: smoke
+  entrypoint:
+    description: The generated integration_test entrypoint.
+    default: integration_test/applens_entry.dart
+  device:
+    description: Target device id; the caller boots the emulator and passes its id.
+    default: emulator-5554
+
+runs:
+  using: composite
+  steps:
+    - uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+    - name: Resolve + activate melos
+      shell: bash
+      run: |
+        dart pub get
+        dart pub global activate melos
+        echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+    - name: Validate graph
+      shell: bash
+      run: dart run applens_cli:applens validate "${{ inputs.qa-graph }}"
+    - name: Compile plan
+      shell: bash
+      run: |
+        mkdir -p build/applens
+        dart run applens_cli:applens plan "${{ inputs.qa-graph }}" \
+          --strategy "${{ inputs.strategy }}" --out build/applens/plan.yaml
+    - name: Run on the booted device
+      shell: bash
+      # The caller (e.g. the nightly workflow) provides the emulator via
+      # reactivecircus/android-emulator-runner and invokes this action inside it.
+      run: dart run applens_cli:applens run "${{ inputs.qa-graph }}" --strategy "${{ inputs.strategy }}" --entrypoint "${{ inputs.entrypoint }}" --device "${{ inputs.device }}"
+    - name: Render report
+      if: always()
+      shell: bash
+      run: dart run applens_cli:applens report "${{ inputs.qa-graph }}" build/applens/run.db --out build/applens/report.html
+    - name: Upload report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: applens-report
+        path: build/applens

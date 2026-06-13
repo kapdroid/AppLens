@@ -16,7 +16,6 @@ dependencies:
     sdk: flutter
   applens_core: any # Workspace-resolved.
   image: ^4.2.0 # PNG encode/decode for the pixel comparator (Session 6).
-  sqlite3: ^2.0.0 # Run store v0 (dependency ladder rung 1; FFI to system sqlite).
 
 dev_dependencies:
   flutter_lints: ^6.0.0

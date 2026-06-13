@@ -17,6 +17,7 @@ dependencies:
   applens_report: any
   applens_crawler: any
   args: ^2.0.0
+  yaml: ^3.1.0 # Reads qa_graph/applens.yaml (permissions, profiles).
 
 dev_dependencies:
   lints: ^6.0.0

@@ -1,7 +1,6 @@
 import 'package:applens_core/applens_core.dart';
 
 import 'fingerprint.dart';
-import 'run_model.dart';
 
 /// OracleTier order for the tier-1 (widget-tree) checks.
 const int tier1Order = 10;

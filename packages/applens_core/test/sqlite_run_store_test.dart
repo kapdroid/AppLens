@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:applens_runner/applens_runner.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:applens_core/applens_core.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('SqliteRunStore round-trips a run record through the schema', () async {

@@ -25,6 +25,11 @@ export 'src/loader/graph_loader.dart';
 export 'src/validate/diagnostic.dart';
 export 'src/validate/validator.dart';
 
+// Run model + store (pure data; produced by the runner, read by the CLI/report).
+export 'src/run/run_model.dart';
+export 'src/run/run_store.dart';
+export 'src/run/sqlite_run_store.dart';
+
 // Shared.
 export 'src/util/source_location.dart';
 

@@ -10,6 +10,7 @@ dependencies:
   yaml: ^3.1.0
   collection: ^1.18.0
   crypto: ^3.0.0 # sha256 for the graph content hash + content-addressed baselines (dependency ladder rung 1: dart.dev-maintained).
+  sqlite3: ^2.0.0 # Run store v0 (dependency ladder rung 1; pure-Dart FFI to system sqlite).
 
 dev_dependencies:
   lints: ^6.0.0

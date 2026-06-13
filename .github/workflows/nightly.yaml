@@ -1,0 +1,50 @@
+name: AppLens Nightly (stranger app)
+
+# The walking-skeleton gate: a real Android emulator runs the stranger app's
+# graph nightly. Green two consecutive nights closes Session 5 (BUILD-PLAN §3).
+on:
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC nightly
+  workflow_dispatch: {}
+
+jobs:
+  emulator-run:
+    runs-on: ubuntu-latest # macOS runners are required for hardware accel; ubuntu uses software emulation.
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: examples/stranger_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: dart pub get
+        working-directory: .
+      - run: dart pub global activate melos && echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+        working-directory: .
+      - name: Enable KVM (Linux emulator)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Boot emulator + run the AppLens plan
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          working-directory: examples/stranger_app
+          # Pre-grant permissions from applens.yaml, then walk the plan ON the
+          # booted emulator (-d targets the device; without it `flutter test`
+          # runs headless on the host). Requires the stranger app's
+          # integration_test entrypoint — see the Session 5 walking-skeleton handoff.
+          script: dart run applens_cli:applens run qa_graph --strategy smoke --device emulator-5554
+      - name: Render report
+        if: always()
+        run: dart run applens_cli:applens report qa_graph build/applens/run.db --out build/applens/report.html
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: applens-nightly-report
+          path: examples/stranger_app/build/applens
