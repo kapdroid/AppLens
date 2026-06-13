@@ -75,9 +75,17 @@ nights running. Until that CI evidence holds, **no Phase 2 work starts.**
 
 ## Status
 
-- ✅ On-device walk (entrypoint, InMemoryRunStore) green on emulator-5554.
-- ◻ `applens run` CLI path on device: writes a SQLite run store, so it needs
-  `sqlite3_flutter_libs` bundled and an `adb pull` of `run.db` before `report`
-  (the entrypoint walk above sidesteps this by using InMemoryRunStore).
-- ◻ Nightly green two consecutive nights in real GitHub Actions (needs a repo).
-- ◻ iOS `simctl` pre-grant path; `settle()` hardening for continuous animations.
+- ✅ On-device walk green on emulator-5554.
+- ✅ **`applens run` → `report` works end-to-end on device.** `applens run
+  qa_graph --device emulator-5554` uses `flutter drive` to walk the app on the
+  device; the entrypoint returns the run via `binding.reportData` and
+  `test_driver/integration_test.dart` writes `build/applens/run.json` on the
+  host; `applens report qa_graph build/applens/run.json` renders green HTML
+  (exit 0). No `adb pull`, no on-device SQLite — the canonical integration_test
+  data path supersedes the earlier sqlite3_flutter_libs/run.db-pull plan.
+- ◻ **Nightly green two consecutive nights in real GitHub Actions** — the last
+  gate item; needs a real repo (human task). Update `nightly.yaml` to run
+  `applens run` via the emulator-runner and `applens report` the resulting
+  `build/applens/run.json`.
+- ◻ iOS `simctl` pre-grant path; `settle()` hardening for continuous animations
+  (Android-first is fine for v1).

@@ -46,7 +46,7 @@ runs:
     - name: Render report
       if: always()
       shell: bash
-      run: dart run applens_cli:applens report "${{ inputs.qa-graph }}" build/applens/run.db --out build/applens/report.html
+      run: dart run applens_cli:applens report "${{ inputs.qa-graph }}" build/applens/run.json --out build/applens/report.html
     - name: Upload report
       if: always()
       uses: actions/upload-artifact@v4
