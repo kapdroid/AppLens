@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:applens_core/applens_core.dart';
@@ -141,23 +142,32 @@ class _ReportCommand extends _Base {
   String get name => 'report';
   @override
   String get description =>
-      'Render an HTML report from a run store (exit 0/1/2).';
+      'Render an HTML report from a run store — .db (SQLite) or .json (exit 0/1/2).';
 
   @override
   Future<int> run() async {
     final rest = argResults!.rest;
     if (rest.length < 2) {
       out.writeln(
-          'usage: applens report <qa_graph> <run.db> [--run-id] [--out]');
+          'usage: applens report <qa_graph> <run.db|run.json> [--run-id] [--out]');
       return 64;
     }
     final graph = _load(rest[0], out);
     if (graph == null) {
       return 1;
     }
-    final store = SqliteRunStore.open(rest[1]);
-    final record = await store.loadRun(argResults!.option('run-id')!);
-    await store.close();
+    final RunRecord? record;
+    if (rest[1].endsWith('.json')) {
+      // The on-device path: a run serialized off the device via flutter drive.
+      record = RunRecord.fromMap(
+        (jsonDecode(File(rest[1]).readAsStringSync()) as Map)
+            .cast<String, Object?>(),
+      );
+    } else {
+      final store = SqliteRunStore.open(rest[1]);
+      record = await store.loadRun(argResults!.option('run-id')!);
+      await store.close();
+    }
     if (record == null) {
       out.writeln('no run "${argResults!.option('run-id')}" in ${rest[1]}');
       return 1;
@@ -249,9 +259,13 @@ class _RunCommand extends _Base {
     for (final grant in grants) {
       out.writeln('adb ${grant.join(' ')}');
     }
+    // `flutter drive` runs the entrypoint ON the device and returns the run
+    // record to the host (build/applens/run.json) via the integration_test
+    // driver's responseData — no adb pull, no on-device SQLite needed.
     final flutterArgs = [
-      'test',
-      entrypoint,
+      'drive',
+      '--driver=test_driver/integration_test.dart',
+      '--target=$entrypoint',
       if (device != null) ...['-d', device],
     ];
     out.writeln('flutter ${flutterArgs.join(' ')}');

@@ -12,7 +12,7 @@ import 'package:stranger_app/cart_model.dart';
 import 'package:stranger_app/main.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('AppLens walks the stranger graph (smoke)', (tester) async {
     final observer = AppLensNavigatorObserver();
@@ -63,5 +63,9 @@ void main() {
     // scroll-into-long-list node).
     await driver.scrollTo(const KeySelector('product_40'));
     expect(find.byKey(const Key('product_40')), findsOneWidget);
+
+    // Return the run to the host (the `flutter drive` driver writes run.json),
+    // so `applens report` can render it off-device.
+    binding.reportData = <String, dynamic>{'run': record.toMap()};
   });
 }

@@ -162,6 +162,6 @@ void main() {
   test('run --dry-run prints the device commands without executing', () async {
     final (code, output) = await _run(['run', _qaGraph, '--dry-run']);
     expect(code, 0);
-    expect(output, contains('flutter test'));
+    expect(output, contains('flutter drive'));
   });
 }

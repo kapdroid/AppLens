@@ -34,6 +34,22 @@ class AssertionResult {
   /// counted as a silent pass).
   final bool skipped;
   final String detail;
+
+  Map<String, Object?> toMap() => {
+        'tier_order': tierOrder,
+        'type': type,
+        'passed': passed,
+        'skipped': skipped,
+        'detail': detail,
+      };
+
+  factory AssertionResult.fromMap(Map<String, Object?> map) => AssertionResult(
+        tierOrder: map['tier_order']! as int,
+        type: map['type']! as String,
+        passed: map['passed']! as bool,
+        skipped: map['skipped'] as bool? ?? false,
+        detail: map['detail'] as String? ?? '',
+      );
 }
 
 /// Failure evidence recorded for a visit (never compared against anything).
@@ -42,6 +58,11 @@ class Artifact {
 
   final String kind; // 'tree' | 'screenshot' | 'log'
   final String description;
+
+  Map<String, Object?> toMap() => {'kind': kind, 'description': description};
+
+  factory Artifact.fromMap(Map<String, Object?> map) => Artifact(
+      kind: map['kind']! as String, description: map['description']! as String);
 }
 
 /// A recorded visit to a node during a run.
@@ -68,6 +89,30 @@ class NodeVisit {
   /// unexpected-transition event (ARCHITECTURE.md §7).
   bool get isUnexpectedTransition =>
       matchedNodeId != null && matchedNodeId != expectedNodeId;
+
+  Map<String, Object?> toMap() => {
+        'step': step,
+        'expected_node_id': expectedNodeId,
+        'matched_node_id': matchedNodeId,
+        'outcome': outcome.name,
+        'assertions': [for (final a in assertions) a.toMap()],
+        'artifacts': [for (final a in artifacts) a.toMap()],
+      };
+
+  factory NodeVisit.fromMap(Map<String, Object?> map) => NodeVisit(
+        step: map['step']! as int,
+        expectedNodeId: map['expected_node_id']! as String,
+        matchedNodeId: map['matched_node_id'] as String?,
+        outcome: NodeOutcome.values.byName(map['outcome']! as String),
+        assertions: [
+          for (final a in (map['assertions'] as List? ?? const []))
+            AssertionResult.fromMap((a as Map).cast<String, Object?>()),
+        ],
+        artifacts: [
+          for (final a in (map['artifacts'] as List? ?? const []))
+            Artifact.fromMap((a as Map).cast<String, Object?>()),
+        ],
+      );
 }
 
 /// A complete run record (ARCHITECTURE.md §13 schema:
@@ -86,4 +131,23 @@ class RunRecord {
   final String graphHash;
   final int seed;
   final List<NodeVisit> visits;
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'strategy': strategy,
+        'graph_hash': graphHash,
+        'seed': seed,
+        'visits': [for (final v in visits) v.toMap()],
+      };
+
+  factory RunRecord.fromMap(Map<String, Object?> map) => RunRecord(
+        id: map['id']! as String,
+        strategy: map['strategy']! as String,
+        graphHash: map['graph_hash']! as String,
+        seed: map['seed']! as int,
+        visits: [
+          for (final v in (map['visits'] as List? ?? const []))
+            NodeVisit.fromMap((v as Map).cast<String, Object?>()),
+        ],
+      );
 }
