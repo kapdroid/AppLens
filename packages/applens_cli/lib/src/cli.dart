@@ -92,6 +92,32 @@ RunRecord? _loadRunJson(String path, StringSink out) {
   }
 }
 
+/// Loads a run from a SQLite `.db` store, returning null with a clear message on
+/// a missing/corrupt file instead of a stack trace — same graceful-load contract
+/// as [_loadRunJson] (a corrupt `.db` download is a real CI scenario). Catches
+/// `Exception` (the SqliteException from a non-database file is one); programming
+/// `Error`s still surface.
+Future<RunRecord?> _loadRunDb(String path, String runId, StringSink out) async {
+  if (!File(path).existsSync()) {
+    out.writeln('no run file: $path');
+    return null;
+  }
+  SqliteRunStore? store;
+  try {
+    store = SqliteRunStore.open(path);
+    final record = await store.loadRun(runId);
+    if (record == null) {
+      out.writeln('no run "$runId" in $path');
+    }
+    return record;
+  } on Exception {
+    out.writeln('run store $path is not a valid AppLens run database');
+    return null;
+  } finally {
+    await store?.close();
+  }
+}
+
 /// Builds the configured LLM provider from `--provider/--model/--api-key-env`
 /// (BYO-key — the key is read from the environment, never a flag). Returns null
 /// with a message when the provider is unknown or the key is unset. Shared by
@@ -256,12 +282,9 @@ class _ReportCommand extends _Base {
         return 1; // _loadRunJson already explained why
       }
     } else {
-      final store = SqliteRunStore.open(rest[1]);
-      record = await store.loadRun(argResults!.option('run-id')!);
-      await store.close();
+      record = await _loadRunDb(rest[1], argResults!.option('run-id')!, out);
       if (record == null) {
-        out.writeln('no run "${argResults!.option('run-id')}" in ${rest[1]}');
-        return 1;
+        return 1; // _loadRunDb already explained why
       }
     }
     TriageReport? triage;

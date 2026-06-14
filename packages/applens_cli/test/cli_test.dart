@@ -204,6 +204,19 @@ void main() {
     expect(output, contains('no run file'));
   });
 
+  test('report on a malformed .db fails cleanly, not with a stack trace',
+      () async {
+    final tmp = Directory.systemTemp.createTempSync('applens_baddb_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final db = '${tmp.path}/run.db';
+    File(db).writeAsStringSync('not a sqlite database at all');
+
+    final (code, output) =
+        await _run(['report', _qaGraph, db, '--out', '${tmp.path}/r.html']);
+    expect(code, 1);
+    expect(output, contains('not a valid AppLens run database'));
+  });
+
   test('report on a malformed --triage file fails cleanly, not with a crash',
       () async {
     final tmp = Directory.systemTemp.createTempSync('applens_badtriage_');
