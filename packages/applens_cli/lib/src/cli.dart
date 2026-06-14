@@ -86,6 +86,9 @@ RunRecord? _loadRunJson(String path, StringSink out) {
   } on TypeError {
     out.writeln('run file $path is missing required run fields');
     return null;
+  } on ArgumentError {
+    out.writeln('run file $path has an invalid value (e.g. unknown outcome)');
+    return null;
   }
 }
 
@@ -259,10 +262,27 @@ class _ReportCommand extends _Base {
         out.writeln('no triage file: $triagePath');
         return 1;
       }
-      triage = TriageReport.fromMap(
-        (jsonDecode(File(triagePath).readAsStringSync()) as Map)
-            .cast<String, Object?>(),
-      );
+      // A hand-edited/truncated triage.json must fail cleanly, not with a stack
+      // trace — same graceful-load contract as the run file above.
+      try {
+        final decoded = jsonDecode(File(triagePath).readAsStringSync());
+        if (decoded is! Map) {
+          out.writeln('triage file $triagePath is not a JSON object');
+          return 1;
+        }
+        triage = TriageReport.fromMap(decoded.cast<String, Object?>());
+      } on FormatException catch (error) {
+        out.writeln('triage file $triagePath is not valid JSON: '
+            '${error.message}');
+        return 1;
+      } on TypeError {
+        out.writeln(
+            'triage file $triagePath is missing required triage fields');
+        return 1;
+      } on ArgumentError {
+        out.writeln('triage file $triagePath has an invalid value');
+        return 1;
+      }
     }
     final outPath = argResults!.option('out')!;
     File(outPath)

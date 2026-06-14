@@ -197,6 +197,44 @@ void main() {
     expect(output, contains('no run file'));
   });
 
+  test('report on a malformed --triage file fails cleanly, not with a crash',
+      () async {
+    final tmp = Directory.systemTemp.createTempSync('applens_badtriage_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final db = '${tmp.path}/run.db';
+    final store = SqliteRunStore.open(db);
+    await store.saveRun(const RunRecord(
+      id: 'run',
+      strategy: 'smoke',
+      graphHash: 'h',
+      seed: 0,
+      visits: [
+        NodeVisit(
+          step: 0,
+          expectedNodeId: 'shop.dashboard',
+          matchedNodeId: 'shop.dashboard',
+          outcome: NodeOutcome.passed,
+        ),
+      ],
+    ));
+    await store.close();
+    final triage = '${tmp.path}/triage.json';
+    File(triage)
+        .writeAsStringSync('[1, 2, 3]'); // an array, not a triage object
+
+    final (code, output) = await _run([
+      'report',
+      _qaGraph,
+      db,
+      '--triage',
+      triage,
+      '--out',
+      '${tmp.path}/r.html',
+    ]);
+    expect(code, 1);
+    expect(output, contains('triage file'));
+  });
+
   test('run --dry-run prints the device commands without executing', () async {
     final (code, output) = await _run(['run', _qaGraph, '--dry-run']);
     expect(code, 0);
