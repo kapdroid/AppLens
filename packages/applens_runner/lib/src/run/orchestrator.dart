@@ -82,8 +82,12 @@ class Orchestrator {
   ) async {
     var step = startStep;
 
-    // The app launches at the entry node; observe and verify it.
-    final entryFingerprint = await fingerprints.capture();
+    // Between plan paths the app is left wherever the previous path ended;
+    // return to this path's start (an entry node) before observing it, so a
+    // multi-path plan walks reliably rather than acting on the wrong screen.
+    // The returned observation is the start node's fingerprint (one capture when
+    // already there, so a single-path walk's observation sequence is unchanged).
+    final entryFingerprint = await _returnToStart(graph, path.start);
     visits.add(
       await _evaluate(graph, path.start, entryFingerprint, step++, path.start),
     );
@@ -331,6 +335,27 @@ class Orchestrator {
       case EdgeAction.native:
         await driver.native(const PermissionAction(''));
     }
+  }
+
+  /// The most pops [_returnToStart] will attempt before giving up — a guard so a
+  /// navigator that refuses to return to the entry can't loop forever.
+  static const int _maxReturnPops = 24;
+
+  /// Pops back toward [start] (an entry node) until the live state matches it,
+  /// bounded by [_maxReturnPops], and returns the final observation (the start
+  /// node's fingerprint). Best-effort: if it cannot reach [start], the caller's
+  /// entry evaluation records the mismatch instead of the walk acting on the
+  /// wrong screen.
+  Future<Fingerprint> _returnToStart(Graph graph, String start) async {
+    var fingerprint = await fingerprints.capture();
+    for (var pops = 0;
+        matchNode(fingerprint, graph) != start && pops < _maxReturnPops;
+        pops++) {
+      await driver.back();
+      await driver.settle(settlePolicy);
+      fingerprint = await fingerprints.capture();
+    }
+    return fingerprint;
   }
 
   Future<List<Artifact>> _artifacts() async {

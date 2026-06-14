@@ -135,6 +135,37 @@ void main() {
     ]);
   });
 
+  test('multi-path: returns to the start node between paths', () async {
+    // A carries an anchor only present at A, so if the second path were walked
+    // from where the first ended (B) without resetting, A's entry check would
+    // fail. The reset pops back to A first.
+    final graph = Graph(
+      nodes: [
+        _node('A', '/a', assertions: [_exists('a_btn')]),
+        _node('B', '/b', assertions: [_exists('b_btn')]),
+      ],
+      entryNodeIds: ['A'],
+    );
+    final plan = _plan([
+      PlanPath(start: 'A', steps: [_tap('B', 'k_ab')]),
+      const PlanPath(start: 'A'), // second path re-verifies the start
+    ]);
+    const fpA = Fingerprint(route: '/a', anchors: {'a_btn'});
+    const fpB = Fingerprint(route: '/b', anchors: {'b_btn'});
+    final driver = FakeDriver();
+
+    // p1 entry A → tap → B; p2 observes B, pops back, re-observes A.
+    final record =
+        await _orchestrator(driver, [fpA, fpB, fpB, fpA]).run(graph, plan);
+
+    expect(
+      record.visits.map((v) => v.outcome),
+      [NodeOutcome.passed, NodeOutcome.passed, NodeOutcome.passed],
+    );
+    expect(record.visits.last.matchedNodeId, 'A');
+    expect(driver.actionLog, contains('back')); // it popped to return to start
+  });
+
   test('soft fail: assertion mismatch, run continues', () async {
     final driver = FakeDriver();
     final record = await _orchestrator(driver, [
