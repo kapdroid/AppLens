@@ -15,7 +15,12 @@ import 'graph_view.dart';
 /// the run's pass/fail summary or the exit code.
 String renderRunReport(RunRecord run, Graph graph, {TriageReport? triage}) {
   final total = graph.nodes.length;
-  final visited = {for (final visit in run.visits) visit.expectedNodeId};
+  // Count only visits to nodes that exist in the rendered graph, so a run
+  // against a since-changed graph (a removed/renamed node) can't report >100%.
+  final visited = {
+    for (final visit in run.visits)
+      if (graph.byId.containsKey(visit.expectedNodeId)) visit.expectedNodeId,
+  };
   final counts = <NodeOutcome, int>{};
   for (final visit in run.visits) {
     counts[visit.outcome] = (counts[visit.outcome] ?? 0) + 1;

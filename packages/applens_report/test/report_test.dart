@@ -172,6 +172,34 @@ void main() {
     expect(exitCodeForRun(mixed), 1);
   });
 
+  test('coverage never exceeds 100% when a run visits a non-graph node', () {
+    // A run against a since-changed graph can carry a visit to a node that no
+    // longer exists; it must not inflate coverage past the graph's node count.
+    const run = RunRecord(
+      id: 'r',
+      strategy: 'smoke',
+      graphHash: 'stale',
+      seed: 0,
+      visits: [
+        NodeVisit(
+          step: 0,
+          expectedNodeId: 'shop.dashboard',
+          matchedNodeId: 'shop.dashboard',
+          outcome: NodeOutcome.passed,
+        ),
+        NodeVisit(
+          step: 1,
+          expectedNodeId: 'shop.ghost', // not in _graph
+          matchedNodeId: null,
+          outcome: NodeOutcome.passed,
+        ),
+      ],
+    );
+    final html = renderRunReport(run, _graph);
+    expect(html, contains('node coverage: 1/2'));
+    expect(html, isNot(contains('200%')));
+  });
+
   test('escapeXml escapes both quote forms', () {
     expect(escapeXml('a\'b"c<d>&'), 'a&#39;b&quot;c&lt;d&gt;&amp;');
   });
