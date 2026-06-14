@@ -24,8 +24,11 @@ String layoutHash(WidgetTreeSnapshot tree, {int buckets = 12}) {
   final shape = StringBuffer();
   final rootRect = tree.root.rect;
 
+  // Negative relative offsets (off-root/transformed children) get their own
+  // buckets rather than all collapsing to 0, so a move within that band still
+  // changes the hash; the top edge still clamps to the last bucket.
   int bucketOf(double value, double extent) =>
-      ((value / extent) * buckets).floor().clamp(0, buckets - 1);
+      ((value / extent) * buckets).floor().clamp(-buckets, buckets - 1);
 
   void visit(SerializedWidget widget, int depth) {
     shape

@@ -80,6 +80,73 @@ void main() {
     expect(tappedIndex, 150);
   });
 
+  testWidgets('tapping a keyed wrapper handled by an ancestor succeeds', (
+    tester,
+  ) async {
+    // The keyed target is transparent padding; the tap is delivered to the
+    // ancestor GestureDetector — legitimate, not "obscured".
+    var tapped = false;
+    await tester.pumpWidget(
+      _harness(
+        Center(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => tapped = true,
+            child: Container(
+              key: const Key('hit'),
+              padding: const EdgeInsets.all(80),
+              child: const SizedBox(width: 1, height: 1),
+            ),
+          ),
+        ),
+      ),
+    );
+    final driver = AppLensWidgetDriver(tester);
+
+    await driver.tap(const KeySelector('hit'));
+    await driver.settle(const SettlePolicy());
+    expect(tapped, isTrue);
+  });
+
+  testWidgets('scrollTo finds the target past a secondary scrollable', (
+    tester,
+  ) async {
+    var tapped = -1;
+    await tester.pumpWidget(
+      _harness(
+        Column(
+          children: [
+            // A short horizontal list first — the old code would drive this one.
+            SizedBox(
+              height: 50,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: 5,
+                itemBuilder: (_, i) => SizedBox(width: 80, child: Text('h_$i')),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: 200,
+                itemBuilder: (_, i) => ListTile(
+                  key: Key('v_$i'),
+                  title: Text('v $i'),
+                  onTap: () => tapped = i,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    final driver = AppLensWidgetDriver(tester);
+
+    await driver.scrollTo(const KeySelector('v_120'));
+    await driver.tap(const KeySelector('v_120'));
+    await driver.settle(const SettlePolicy());
+    expect(tapped, 120);
+  });
+
   testWidgets('tapping an obscured widget fails, naming the obscurer', (
     tester,
   ) async {
@@ -183,6 +250,12 @@ void main() {
 
     expect(cropped.width, lessThan(full.width));
     expect(cropped.height, lessThan(full.height));
-    expect(img.decodePng(cropped.pngBytes), isNotNull);
+    // The crop must land on the box's pixels (DPR-scaled), not the white
+    // background — the center pixel is the box's blue.
+    final image = img.decodePng(cropped.pngBytes)!;
+    final center = image.getPixel(image.width ~/ 2, image.height ~/ 2);
+    expect(center.b, greaterThan(center.r),
+        reason: 'crop center should be the blue box, not the background');
+    expect(center.b, greaterThan(120));
   });
 }

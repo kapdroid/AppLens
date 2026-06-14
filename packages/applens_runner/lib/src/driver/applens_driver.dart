@@ -51,26 +51,32 @@ class AppLensWidgetDriver implements AppLensDriver {
   @override
   Future<void> scrollTo(WidgetSelector selector) async {
     final finder = resolveSelector(selector);
-    final scrollables = find.byType(Scrollable);
-    if (scrollables.evaluate().isEmpty) {
+    if (find.byType(Scrollable).evaluate().isEmpty) {
       throw DriverException(
         'scrollTo ${describeSelector(selector)}: no Scrollable on screen',
       );
     }
-    final scrollable = tester.widget<Scrollable>(scrollables.first);
-    final step = switch (scrollable.axisDirection) {
-      AxisDirection.down => const Offset(0, -_scrollStep),
-      AxisDirection.up => const Offset(0, _scrollStep),
-      AxisDirection.right => const Offset(-_scrollStep, 0),
-      AxisDirection.left => const Offset(_scrollStep, 0),
-    };
     for (var i = 0; i < _maxScrolls; i++) {
       if (finder.evaluate().isNotEmpty) {
         await tester.ensureVisible(finder);
         await tester.pumpAndSettle();
         return;
       }
-      await tester.drag(scrollables.first, step);
+      // Advance every scrollable in its own axis — the one that builds the
+      // target reveals it, so we never have to guess which Scrollable is right
+      // (a secondary list/carousel before the target's no longer breaks this).
+      final scrollables = find.byType(Scrollable);
+      for (var s = 0; s < scrollables.evaluate().length; s++) {
+        final scrollable = tester.widget<Scrollable>(scrollables.at(s));
+        await tester.drag(
+            scrollables.at(s),
+            switch (scrollable.axisDirection) {
+              AxisDirection.down => const Offset(0, -_scrollStep),
+              AxisDirection.up => const Offset(0, _scrollStep),
+              AxisDirection.right => const Offset(-_scrollStep, 0),
+              AxisDirection.left => const Offset(_scrollStep, 0),
+            });
+      }
       await tester.pump();
     }
     throw DriverException(
@@ -127,8 +133,9 @@ class AppLensWidgetDriver implements AppLensDriver {
 
     // Render the root repaint boundary's layer and encode to PNG — straight
     // (un-premultiplied) alpha, avoiding the premultiplied rawRgba trap of
-    // ui.Image.toByteData (ARCHITECTURE.md §8). captureImage renders at logical
-    // resolution, so logical widget rects map 1:1 onto image pixels.
+    // ui.Image.toByteData (ARCHITECTURE.md §8). The layer renders at *physical*
+    // resolution (logical × devicePixelRatio), so a crop derived from logical
+    // widget rects must scale by DPR (see WidgetScope below).
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
       throw const DriverException('no widget tree is mounted to capture');
@@ -161,10 +168,13 @@ class AppLensWidgetDriver implements AppLensDriver {
     _ensureSingle(finder, selector);
     final rect = tester.getRect(finder);
     final decoded = img.decodePng(fullPng)!;
-    final left = rect.left.round().clamp(0, decoded.width);
-    final top = rect.top.round().clamp(0, decoded.height);
-    final width = rect.width.round().clamp(1, decoded.width - left);
-    final height = rect.height.round().clamp(1, decoded.height - top);
+    // The capture is at physical resolution; getRect is logical. Scale the crop
+    // by devicePixelRatio so it lands on the widget's pixels at any DPR.
+    final dpr = tester.view.devicePixelRatio;
+    final left = (rect.left * dpr).round().clamp(0, decoded.width);
+    final top = (rect.top * dpr).round().clamp(0, decoded.height);
+    final width = (rect.width * dpr).round().clamp(1, decoded.width - left);
+    final height = (rect.height * dpr).round().clamp(1, decoded.height - top);
     final cropped = img.copyCrop(
       decoded,
       x: left,
@@ -210,18 +220,25 @@ class AppLensWidgetDriver implements AppLensDriver {
     }
   }
 
-  /// Verifies the target is the front-most widget at its center, so a tap will
-  /// land on it. If something covers it, names the obscuring widget.
+  /// Verifies a tap at the target's center is delivered to the target — its own
+  /// subtree (it handles the tap) or an ancestor (an ancestor handler covering
+  /// the target, e.g. a keyed transparent wrapper inside a GestureDetector).
+  /// Only a front-most node that is neither — a true overlay — is "obscured".
   void _ensureHittable(Finder finder, WidgetSelector selector) {
     final center = tester.getCenter(finder);
     final target = tester.renderObject(finder);
-    final subtree = <RenderObject>{};
+    final allowed = <RenderObject>{};
     void collect(RenderObject node) {
-      subtree.add(node);
+      allowed.add(node);
       node.visitChildren(collect);
     }
 
     collect(target);
+    for (RenderObject? ancestor = target.parent;
+        ancestor != null;
+        ancestor = ancestor.parent) {
+      allowed.add(ancestor);
+    }
 
     final result = tester.hitTestOnBinding(center);
     for (final entry in result.path) {
@@ -229,7 +246,7 @@ class AppLensWidgetDriver implements AppLensDriver {
       if (hit is! RenderObject) {
         continue;
       }
-      if (subtree.contains(hit)) {
+      if (allowed.contains(hit)) {
         return;
       }
       throw DriverException(

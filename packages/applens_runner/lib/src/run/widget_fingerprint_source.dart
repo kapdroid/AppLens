@@ -3,24 +3,43 @@ import 'package:flutter/widgets.dart';
 import '../driver/driver.dart';
 import 'fingerprint.dart';
 
-/// Tracks the current route name for fingerprinting (ARCHITECTURE.md §7).
-/// Installed in the generated entrypoint's app via `navigatorObservers`.
+/// Tracks the current route for fingerprinting (ARCHITECTURE.md §7) by mirroring
+/// the navigator's route stack, so the route is correct after pop, replace, and
+/// removeRoute — not just push. Installed in the generated entrypoint's app via
+/// `navigatorObservers`. [currentRoute] is the top route's name, or null when
+/// the top route is unnamed (honest — a fingerprint then matches on anchors,
+/// rather than inheriting a stale previous route's name).
 class AppLensNavigatorObserver extends NavigatorObserver {
-  String? currentRoute;
+  final List<Route<dynamic>> _stack = [];
+
+  String? get currentRoute => _stack.isEmpty ? null : _stack.last.settings.name;
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    currentRoute = route.settings.name ?? currentRoute;
+    _stack.add(route);
   }
 
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    currentRoute = previousRoute?.settings.name ?? currentRoute;
+    _stack.remove(route);
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.remove(route);
   }
 
   @override
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    currentRoute = newRoute?.settings.name ?? currentRoute;
+    final index = oldRoute == null ? -1 : _stack.indexOf(oldRoute);
+    if (newRoute == null) {
+      return;
+    }
+    if (index >= 0) {
+      _stack[index] = newRoute;
+    } else {
+      _stack.add(newRoute);
+    }
   }
 }
 

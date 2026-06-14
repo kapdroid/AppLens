@@ -71,6 +71,16 @@ void main() {
       );
     });
 
+    test('distinguishes off-root (negative-relative) positions', () {
+      // A child left of the root: moving it within the off-root band must still
+      // change the hash (previously every negative offset collapsed to bucket 0).
+      final a = layoutHash(
+          _tree([_w('Card', rect: const Rect.fromLTWH(-200, 0, 100, 40))]));
+      final b = layoutHash(
+          _tree([_w('Card', rect: const Rect.fromLTWH(-10, 0, 100, 40))]));
+      expect(a, isNot(b));
+    });
+
     test('handles a mixed tree — root has geometry, a child does not', () {
       // The real production shape: a box-backed root over a sliver/non-box
       // child whose rect is null. Must stay deterministic and structure-aware.
