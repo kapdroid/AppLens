@@ -254,10 +254,23 @@ String _routeKey(PlanPath path) =>
     '${path.start}>${path.steps.map((step) => step.to).join('>')}';
 
 /// Identity of a path including *how* each hop is taken (action + operands), so
-/// parallel edges between the same two nodes are distinguished.
-String _edgeIdentityKey(PlanPath path) =>
-    '${path.start}>${path.steps.map((step) => '${step.to}/${step.action.yaml}/'
-        '${step.key ?? ''}/${step.text ?? ''}/${step.uri ?? ''}').join('>')}';
+/// parallel edges between the same two nodes are distinguished. Fields are joined
+/// with the unit separator (U+001F), which can't appear in a key/text/uri, so an
+/// operand containing the delimiter can't collide two distinct edges.
+String _edgeIdentityKey(PlanPath path) {
+  const sep = '\u001f';
+  return [
+    path.start,
+    for (final step in path.steps)
+      [
+        step.to,
+        step.action.yaml,
+        step.key ?? '',
+        step.text ?? '',
+        step.uri ?? ''
+      ].join(sep),
+  ].join(sep);
+}
 
 // --- Deterministic BFS ------------------------------------------------------
 

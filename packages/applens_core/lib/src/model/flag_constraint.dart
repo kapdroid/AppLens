@@ -26,9 +26,16 @@ sealed class FlagConstraint {
       final op = comparison.group(1)!;
       final n = int.parse(comparison.group(2)!);
       return switch (op) {
-        '>' => IntRangeConstraint(low: n + 1, high: null, raw: text),
+        // `> maxInt` / `< minInt` are unsatisfiable; produce a bounded-empty
+        // range (low > high) rather than letting n±1 wrap to an unbounded one
+        // that would silently accept everything.
+        '>' => n == _maxInt
+            ? IntRangeConstraint(low: 1, high: 0, raw: text) // empty (low>high)
+            : IntRangeConstraint(low: n + 1, high: null, raw: text),
         '>=' => IntRangeConstraint(low: n, high: null, raw: text),
-        '<' => IntRangeConstraint(low: null, high: n - 1, raw: text),
+        '<' => n == _minInt
+            ? IntRangeConstraint(low: 1, high: 0, raw: text) // empty (low>high)
+            : IntRangeConstraint(low: null, high: n - 1, raw: text),
         '<=' => IntRangeConstraint(low: null, high: n, raw: text),
         _ => IntRangeConstraint(low: n, high: n, raw: text), // ==
       };
@@ -50,6 +57,8 @@ sealed class FlagConstraint {
   bool accepts(String value);
 
   static final RegExp _comparison = RegExp(r'^(>=|<=|==|>|<)\s*(-?\d+)$');
+  static const int _maxInt = 9223372036854775807;
+  static const int _minInt = -9223372036854775808;
 }
 
 /// A boolean flag constraint (`true` / `false`).

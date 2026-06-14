@@ -184,6 +184,47 @@ void main() {
     expect(smoke.alternateInboundPaths['shop.catalog'], hasLength(1));
   });
 
+  test('impact distinguishes edges whose operands would collide under a slash',
+      () {
+    // Two distinct enter_text edges whose (key, text) fields join identically
+    // if you concatenate with "/": ('a','b/c') and ('a/b','c') both flatten to
+    // "...a/b/c". The unit-separator key keeps them distinct so neither way in
+    // is silently dropped (§6 "every edge into it").
+    final collide = Graph(
+      nodes: [
+        Node(
+          id: 'shop.dashboard',
+          identity: const NodeIdentity(route: '/'),
+          payload: const NodePayload(edges: [
+            Edge(
+                action: EdgeAction.enterText,
+                target: 'shop.catalog',
+                key: 'a',
+                text: 'b/c'),
+            Edge(
+                action: EdgeAction.enterText,
+                target: 'shop.catalog',
+                key: 'a/b',
+                text: 'c'),
+          ]),
+        ),
+        Node(
+            id: 'shop.catalog',
+            identity: const NodeIdentity(route: '/catalog'),
+            payload: const NodePayload()),
+      ],
+      entryNodeIds: const ['shop.dashboard'],
+    );
+    final plan = compilePlan(collide,
+        strategy: PlanStrategy.impact, changedNodeIds: {'shop.catalog'});
+
+    expect(plan.paths, hasLength(2)); // not collapsed by a delimiter collision
+    expect(
+      plan.paths.map((p) => (p.steps.last.key, p.steps.last.text)).toSet(),
+      {('a', 'b/c'), ('a/b', 'c')},
+    );
+  });
+
   test('impact is deterministic: same change set → byte-identical plan', () {
     String compile() => writeYaml(compilePlan(
           graph,

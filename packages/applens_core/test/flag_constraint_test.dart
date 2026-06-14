@@ -33,6 +33,23 @@ void main() {
     test('the raw spelling is preserved for round-tripping', () {
       expect(_c('>0').raw, '>0');
     });
+
+    test('> maxInt and < minInt are unsatisfiable, not silently universal', () {
+      // n+1 / n-1 would overflow at the int64 boundary and wrap to an unbounded
+      // range that accepts everything — defeating ambiguity detection. Instead
+      // they parse to an empty range (low > high) that accepts nothing.
+      const maxInt = 9223372036854775807;
+      const minInt = -9223372036854775808;
+
+      final gtMax = _c('>$maxInt') as IntRangeConstraint;
+      expect(gtMax.low! > gtMax.high!, isTrue); // empty
+      expect(gtMax.accepts('$maxInt'), isFalse);
+      expect(gtMax.raw, '>$maxInt'); // raw kept for round-trip
+
+      final ltMin = _c('<$minInt') as IntRangeConstraint;
+      expect(ltMin.low! > ltMin.high!, isTrue); // empty
+      expect(ltMin.accepts('$minInt'), isFalse);
+    });
   });
 
   group('contradicts (joint satisfiability on the same flag)', () {
