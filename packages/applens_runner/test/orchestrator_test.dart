@@ -367,6 +367,33 @@ void main() {
       expect(record.visits[1].outcome, NodeOutcome.passed);
     });
 
+    test('tier 3 compares a node once per run, even when it is revisited',
+        () async {
+      final png = _png(8, 8, 10, 20, 30);
+      final driver =
+          FakeDriver(capture: Capture(pngBytes: png, width: 8, height: 8));
+      final twoPasses = _plan([
+        PlanPath(start: 'A', steps: [_tap('B', 'k_ab')]),
+        PlanPath(start: 'A', steps: [_tap('B', 'k_ab')]),
+      ]);
+      final record = await Orchestrator(
+        driver: driver,
+        fingerprints: _ScriptedFingerprints([_fpA, _fpBpass, _fpA, _fpBpass]),
+        store: InMemoryRunStore(),
+        baselines: _FakeBaselines(png),
+      ).run(graphWithVisualB(), twoPasses);
+
+      expect(
+        record.visits.where((v) => v.expectedNodeId == 'B'),
+        hasLength(2),
+      );
+      final tier3Count = record.visits
+          .expand((v) => v.assertions)
+          .where((a) => a.tierOrder == tier3Order)
+          .length;
+      expect(tier3Count, 1, reason: 'golden compared on the first reach only');
+    });
+
     test('a tier-1 failure short-circuits tier 3 — no capture is taken',
         () async {
       final driver = FakeDriver(

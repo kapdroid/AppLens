@@ -7,6 +7,11 @@ payload:
   assertions:
     - { type: widget_exists, key: btn_start_shopping }
     - { type: text_equals, key: lbl_welcome, value: Welcome }
+  visual_baselines:
+    - context: { device: emulator, locale: en, theme: light }
+      capture: full_screen
+      state: approved
+      image: "sha256:7f43b204f657fae0f7a5b67163e5ac331f686a0f8fffdfaa1ed4d4cae6e6a7d9"
   edges:
     - { action: tap, key: btn_start_shopping, target: catalog }
     - { action: tap, key: btn_view_cart, target: cart }

@@ -42,7 +42,14 @@ class Orchestrator {
   /// matches (single-profile v1); when set, a baseline's context must match.
   final BaselineContext? captureContext;
 
+  /// Nodes whose tier-3 baseline has been compared this run. A golden captures a
+  /// node's *canonical* appearance, so it is compared on the first reach only —
+  /// re-observations during a multi-path walk land the node in transient states
+  /// (mid-transition, post-back) that are not regressions.
+  final Set<String> _tier3Evaluated = <String>{};
+
   Future<RunRecord> run(Graph graph, Plan plan, {String runId = 'run'}) async {
+    _tier3Evaluated.clear();
     final visits = <NodeVisit>[];
     var step = 0;
     for (final path in plan.paths) {
@@ -140,9 +147,10 @@ class Orchestrator {
     if (!_anyFailed(assertions) && _wantsTier2(node)) {
       assertions.addAll(evaluateTier2(node, await driver.tree()));
     }
-    if (!_anyFailed(assertions)) {
+    if (!_anyFailed(assertions) && !_tier3Evaluated.contains(expected)) {
       final baseline = _approvedBaselineFor(node);
       if (baseline != null) {
+        _tier3Evaluated.add(expected);
         final capture = await driver.capture(deriveCaptureScope(node));
         final result = evaluateTier3(
           actual: capture,
