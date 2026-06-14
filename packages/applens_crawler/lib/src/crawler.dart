@@ -81,7 +81,7 @@ Future<CrawlResult> crawl(
       final next = _signature(fp, tree);
       final fromId = nodes[sig]!.id;
       final toId = register(next, fp);
-      final edgeKey = '$sig$key$next';
+      final edgeKey = '$sig\u001f$key\u001f$next';
       edges.putIfAbsent(
           edgeKey, () => _DraftEdge(fromId: fromId, key: key, toId: toId));
       sig = next;
@@ -131,7 +131,7 @@ DriftReport driftReport(Graph discovered, Graph approved) {
   final approvedActions = <String>{
     for (final n in approved.nodes)
       for (final e in n.payload.edges)
-        '${n.identity.route}${e.key ?? e.action.yaml}',
+        '${n.identity.route}\u001f${e.key ?? e.action.yaml}',
   };
 
   final newRoutes = <String>{};
@@ -142,7 +142,7 @@ DriftReport driftReport(Graph discovered, Graph approved) {
       newRoutes.add(route);
     }
     for (final e in n.payload.edges) {
-      final sig = '$route${e.key ?? e.action.yaml}';
+      final sig = '$route\u001f${e.key ?? e.action.yaml}';
       if (!approvedActions.contains(sig)) {
         newActions.add('$route --${e.key ?? e.action.yaml}-->');
       }
@@ -171,7 +171,7 @@ class _DraftEdge {
 }
 
 String _signature(Fingerprint fp, WidgetTreeSnapshot tree) =>
-    '${fp.route ?? ''}${layoutHash(tree)}';
+    '${fp.route ?? ''}\u001f${layoutHash(tree)}';
 
 String _uniqueId(String module, String? route, int n, Set<String> used) {
   final base = _routeSlug(route) ?? 's$n';
