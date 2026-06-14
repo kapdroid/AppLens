@@ -43,6 +43,21 @@ class AppLensWidgetDriver implements AppLensDriver {
     }
   }
 
+  /// Synchronous [_guard]: the same FlutterError/StateError → [DriverException]
+  /// translation for the geometry probes (`getRect`/`getCenter`/`renderObject`),
+  /// which raise a `FlutterError` when a keyed target/anchor is not a `RenderBox`
+  /// (a valid graph anchor — see `_rectOf`) and must not abort the run.
+  T _guardSync<T>(String what, T Function() action) {
+    try {
+      return action();
+    } on Error catch (error) {
+      if (error is FlutterError || error is StateError) {
+        throw DriverException('$what: $error');
+      }
+      rethrow;
+    }
+  }
+
   @override
   Future<void> tap(WidgetSelector selector) async {
     final finder = resolveSelector(selector);
@@ -193,7 +208,11 @@ class AppLensWidgetDriver implements AppLensDriver {
     final selector = (scope as WidgetScope).selector;
     final finder = resolveSelector(selector);
     _ensureSingle(finder, selector);
-    final rect = tester.getRect(finder);
+    // getRect raises a FlutterError when the anchor isn't a RenderBox (a valid
+    // overlay anchor — e.g. a keyed Semantics/Builder); surface it as a
+    // DriverException so the tier-3 evaluator skips it rather than aborting.
+    final rect = _guardSync(
+        'capture ${describeSelector(selector)}', () => tester.getRect(finder));
     final decoded = img.decodePng(fullPng)!;
     // The capture is at physical resolution; getRect is logical. Scale the crop
     // by devicePixelRatio so it lands on the widget's pixels at any DPR.
@@ -257,8 +276,9 @@ class AppLensWidgetDriver implements AppLensDriver {
   /// the target, e.g. a keyed transparent wrapper inside a GestureDetector).
   /// Only a front-most node that is neither — a true overlay — is "obscured".
   void _ensureHittable(Finder finder, WidgetSelector selector) {
-    final center = tester.getCenter(finder);
-    final target = tester.renderObject(finder);
+    final what = 'tap ${describeSelector(selector)}';
+    final center = _guardSync(what, () => tester.getCenter(finder));
+    final target = _guardSync(what, () => tester.renderObject(finder));
 
     // Allowing ancestor handlers (above) must not allow a *disabled* region: if
     // an ancestor is an absorbing AbsorbPointer or an ignoring IgnorePointer,

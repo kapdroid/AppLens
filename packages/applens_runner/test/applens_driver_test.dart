@@ -379,4 +379,63 @@ void main() {
     expect(cropped.height, greaterThanOrEqualTo(1));
     expect(cropped.pngBytes, isNotEmpty);
   });
+
+  testWidgets('tap of a non-RenderBox target throws DriverException, not Error',
+      (
+    tester,
+  ) async {
+    // A keyed sliver resolves uniquely but its render object is a RenderSliver,
+    // not a RenderBox, so getCenter raises a FlutterError; the driver must
+    // surface it as a DriverException (an Error would abort the orchestrator).
+    await tester.pumpWidget(
+      _harness(
+        CustomScrollView(
+          slivers: const [
+            SliverToBoxAdapter(
+              key: Key('sliver'),
+              child: SizedBox(height: 20),
+            ),
+          ],
+        ),
+      ),
+    );
+    final driver = AppLensWidgetDriver(tester);
+
+    await expectLater(
+      driver.tap(const KeySelector('sliver')),
+      throwsA(isA<DriverException>()),
+    );
+  });
+
+  testWidgets('capture of a non-RenderBox anchor throws DriverException', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _harness(
+        CustomScrollView(
+          slivers: const [
+            SliverToBoxAdapter(
+              key: Key('sliver'),
+              child: SizedBox(height: 20),
+            ),
+          ],
+        ),
+      ),
+    );
+    final driver = AppLensWidgetDriver(tester);
+
+    // getRect on the sliver raises a FlutterError; capture must surface it as a
+    // DriverException so the tier-3 evaluator skips it rather than aborting.
+    // (Catch inside runAsync — it routes a callback throw to the zone, not its
+    // returned future.)
+    Object? caught;
+    await tester.runAsync(() async {
+      try {
+        await driver.capture(const WidgetScope(KeySelector('sliver')));
+      } catch (error) {
+        caught = error;
+      }
+    });
+    expect(caught, isA<DriverException>());
+  });
 }
