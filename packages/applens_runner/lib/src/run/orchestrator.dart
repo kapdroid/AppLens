@@ -4,6 +4,7 @@ import 'package:applens_core/applens_core.dart';
 import '../driver/driver.dart';
 import '../visual/baseline_source.dart';
 import '../visual/capture_scope.dart';
+import '../visual/proposal_source.dart';
 import '../visual/visual_tier.dart';
 import 'fingerprint.dart';
 import 'node_matcher.dart';
@@ -26,6 +27,7 @@ class Orchestrator {
     required this.store,
     this.settlePolicy = const SettlePolicy(),
     this.baselines,
+    this.proposals,
     this.captureContext,
   });
 
@@ -37,6 +39,11 @@ class Orchestrator {
   /// Loads approved baseline images for tier 3. Null disables tier 3 entirely
   /// (the default headless/no-visual config).
   final BaselineSource? baselines;
+
+  /// Open baseline proposals (ARCHITECTURE.md §9). When a capture drifts from
+  /// the approved baseline but matches an open proposal, the node is `pending`
+  /// (yellow), not red. Null = no proposals (every drift is red).
+  final ProposalSource? proposals;
 
   /// The profile this run captures under. When null, any approved baseline
   /// matches (single-profile v1); when set, a baseline's context must match.
@@ -147,6 +154,7 @@ class Orchestrator {
     if (!_anyFailed(assertions) && _wantsTier2(node)) {
       assertions.addAll(evaluateTier2(node, await driver.tree()));
     }
+    var pending = false;
     if (!_anyFailed(assertions) && !_tier3Evaluated.contains(expected)) {
       final baseline = _approvedBaselineFor(node);
       if (baseline != null) {
@@ -155,19 +163,36 @@ class Orchestrator {
         final result = evaluateTier3(
           actual: capture,
           baselinePng: await baselines!.load(baseline),
-          comparator: VisualComparator(
-            diffRatioThreshold: baseline.threshold ?? defaultDiffRatioThreshold,
-          ),
+          comparator: _comparatorFor(baseline),
         );
-        assertions.add(result.assertion);
-        if (result.diffPng != null) {
-          extraArtifacts.add(
-            Artifact(
-              kind: 'diff',
-              description: 'tier-3 ${node.id}: ${result.assertion.detail}',
-              bytes: result.diffPng,
-            ),
-          );
+        if (result.assertion.passed || result.assertion.skipped) {
+          assertions.add(result.assertion);
+        } else {
+          // Drift from the approved baseline. Matching an open proposal is
+          // pending (yellow), not a regression (ARCHITECTURE.md §9).
+          final proposal = await _matchedOpenProposal(node, capture);
+          if (proposal != null) {
+            pending = true;
+            assertions.add(
+              AssertionResult(
+                tierOrder: tier3Order,
+                type: 'visual_pending',
+                passed: true,
+                detail: 'matches open proposal ${proposal.image}',
+              ),
+            );
+          } else {
+            assertions.add(result.assertion);
+            if (result.diffPng != null) {
+              extraArtifacts.add(
+                Artifact(
+                  kind: 'diff',
+                  description: 'tier-3 ${node.id}: ${result.assertion.detail}',
+                  bytes: result.diffPng,
+                ),
+              );
+            }
+          }
         }
       }
     }
@@ -177,11 +202,39 @@ class Orchestrator {
       step: step,
       expectedNodeId: expected,
       matchedNodeId: matched,
-      outcome: failed ? NodeOutcome.failedSoft : NodeOutcome.passed,
+      outcome: failed
+          ? NodeOutcome.failedSoft
+          : pending
+              ? NodeOutcome.pending
+              : NodeOutcome.passed,
       assertions: assertions,
       artifacts: failed ? [...await _artifacts(), ...extraArtifacts] : const [],
     );
   }
+
+  /// The first open proposal for [node] whose golden the [capture] matches, or
+  /// null. Proposal goldens are content-addressed in the same [baselines] store.
+  Future<VisualBaseline?> _matchedOpenProposal(
+      Node node, Capture capture) async {
+    if (proposals == null) {
+      return null;
+    }
+    for (final proposal in await proposals!.openProposalsFor(node.id)) {
+      final result = evaluateTier3(
+        actual: capture,
+        baselinePng: await baselines!.load(proposal),
+        comparator: _comparatorFor(proposal),
+      );
+      if (result.assertion.passed) {
+        return proposal;
+      }
+    }
+    return null;
+  }
+
+  VisualComparator _comparatorFor(VisualBaseline baseline) => VisualComparator(
+        diffRatioThreshold: baseline.threshold ?? defaultDiffRatioThreshold,
+      );
 
   bool _anyFailed(List<AssertionResult> results) =>
       results.any((a) => !a.skipped && !a.passed);

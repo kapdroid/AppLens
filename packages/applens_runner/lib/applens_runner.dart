@@ -8,6 +8,7 @@ export 'src/engine/frame_stabilizer.dart';
 export 'src/oracle/oracle.dart';
 export 'src/visual/baseline_recorder.dart';
 export 'src/visual/baseline_source.dart';
+export 'src/visual/proposal_source.dart';
 
 // Runner loop: orchestrator + fingerprint seam. The pure run model, RunStore
 // seam, and SQLite store live in applens_core (shared by the CLI and report).

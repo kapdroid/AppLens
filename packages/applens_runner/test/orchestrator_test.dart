@@ -25,6 +25,26 @@ class _FakeBaselines implements BaselineSource {
   Future<Uint8List?> load(VisualBaseline baseline) async => _png;
 }
 
+/// A BaselineSource resolving each baseline by its content-address image.
+class _MapBaselines implements BaselineSource {
+  _MapBaselines(this._byImage);
+  final Map<String?, Uint8List> _byImage;
+
+  @override
+  Future<Uint8List?> load(VisualBaseline baseline) async =>
+      _byImage[baseline.image];
+}
+
+/// Scripted open proposals, keyed by node id.
+class _FakeProposals implements ProposalSource {
+  _FakeProposals(this._byNode);
+  final Map<String, List<VisualBaseline>> _byNode;
+
+  @override
+  Future<List<VisualBaseline>> openProposalsFor(String nodeId) async =>
+      _byNode[nodeId] ?? const [];
+}
+
 /// A scripted [FingerprintSource]: returns each fingerprint in order, clamping
 /// at the last so over-reads are harmless.
 class _ScriptedFingerprints implements FingerprintSource {
@@ -409,6 +429,102 @@ void main() {
         isFalse,
       );
       expect(driver.actionLog, isNot(contains('capture')));
+    });
+  });
+
+  group('tier 3 proposals → pending (ARCHITECTURE §9)', () {
+    final pngApproved = _png(8, 8, 10, 20, 30);
+    final pngProposal = _png(8, 8, 200, 0, 0);
+    final pngOther = _png(8, 8, 0, 200, 0);
+    const ctx = BaselineContext(device: 'host', locale: 'en', theme: 'light');
+    const approved = VisualBaseline(
+      context: ctx,
+      capture: CaptureKind.fullScreen,
+      state: BaselineState.approved,
+      image: 'sha256:A',
+    );
+    const proposal = VisualBaseline(
+      context: ctx,
+      capture: CaptureKind.fullScreen,
+      state: BaselineState.proposed,
+      image: 'sha256:B',
+    );
+    Graph graphB() => Graph(
+          nodes: [
+            _node('A', '/a'),
+            Node(
+              id: 'B',
+              identity: const NodeIdentity(route: '/b'),
+              payload: const NodePayload(
+                assertions: [
+                  Assertion(type: 'widget_exists', args: {'key': 'b_btn'})
+                ],
+                visualBaselines: [approved],
+              ),
+            ),
+          ],
+          entryNodeIds: ['A'],
+        );
+    final toB = _plan([
+      PlanPath(start: 'A', steps: [_tap('B', 'k_ab')]),
+    ]);
+    Orchestrator orch(FakeDriver driver, ProposalSource? proposals) =>
+        Orchestrator(
+          driver: driver,
+          fingerprints: _ScriptedFingerprints([_fpA, _fpBpass]),
+          store: InMemoryRunStore(),
+          baselines:
+              _MapBaselines({'sha256:A': pngApproved, 'sha256:B': pngProposal}),
+          proposals: proposals,
+        );
+
+    test('drift that matches an open proposal is pending, not red', () async {
+      final driver = FakeDriver(
+          capture: Capture(pngBytes: pngProposal, width: 8, height: 8));
+      final record = await orch(
+          driver,
+          _FakeProposals({
+            'B': [proposal]
+          })).run(graphB(), toB);
+
+      expect(record.visits[1].outcome, NodeOutcome.pending);
+      expect(
+        record.visits[1].assertions.any((a) => a.type == 'visual_pending'),
+        isTrue,
+      );
+    });
+
+    test('drift beyond both approved and proposals is red', () async {
+      final driver =
+          FakeDriver(capture: Capture(pngBytes: pngOther, width: 8, height: 8));
+      final record = await orch(
+          driver,
+          _FakeProposals({
+            'B': [proposal]
+          })).run(graphB(), toB);
+
+      expect(record.visits[1].outcome, NodeOutcome.failedSoft);
+      expect(record.visits[1].artifacts.any((a) => a.kind == 'diff'), isTrue);
+    });
+
+    test('a capture matching the approved baseline stays passed', () async {
+      final driver = FakeDriver(
+          capture: Capture(pngBytes: pngApproved, width: 8, height: 8));
+      final record = await orch(
+          driver,
+          _FakeProposals({
+            'B': [proposal]
+          })).run(graphB(), toB);
+
+      expect(record.visits[1].outcome, NodeOutcome.passed);
+    });
+
+    test('no proposal source → a drift is plain red', () async {
+      final driver = FakeDriver(
+          capture: Capture(pngBytes: pngProposal, width: 8, height: 8));
+      final record = await orch(driver, null).run(graphB(), toB);
+
+      expect(record.visits[1].outcome, NodeOutcome.failedSoft);
     });
   });
 
