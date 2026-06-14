@@ -124,7 +124,7 @@ void main() {
       final baseline = layoutHash(tree);
       final results = evaluateTier2(
         node([
-          Assertion(type: 'layout_hash', args: {'value': baseline})
+          Assertion(type: 'layout_hash', args: {'baseline': baseline})
         ]),
         tree,
       );
@@ -136,7 +136,8 @@ void main() {
     test('fails when the layout has drifted from the baseline', () {
       final results = evaluateTier2(
         node([
-          const Assertion(type: 'layout_hash', args: {'value': 'sha256:stale'})
+          const Assertion(
+              type: 'layout_hash', args: {'baseline': 'sha256:stale'})
         ]),
         _tree([_w('Text')]),
       );

@@ -424,7 +424,7 @@ void main() {
       ).run(
         graphWithB([
           _exists('b_btn'),
-          Assertion(type: 'layout_hash', args: {'value': baseline}),
+          Assertion(type: 'layout_hash', args: {'baseline': baseline}),
         ]),
         toB,
       );
@@ -444,7 +444,8 @@ void main() {
       ).run(
         graphWithB([
           _exists('b_btn'),
-          const Assertion(type: 'layout_hash', args: {'value': 'sha256:old'}),
+          const Assertion(
+              type: 'layout_hash', args: {'baseline': 'sha256:old'}),
         ]),
         toB,
       );
@@ -466,7 +467,7 @@ void main() {
       ).run(
         graphWithB([
           _exists('b_btn'),
-          Assertion(type: 'layout_hash', args: {'value': baseline}),
+          Assertion(type: 'layout_hash', args: {'baseline': baseline}),
         ]),
         toB,
       );

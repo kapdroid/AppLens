@@ -73,7 +73,9 @@ List<AssertionResult> evaluateTier2(Node node, WidgetTreeSnapshot tree) {
     if (assertion.type != 'layout_hash') {
       continue;
     }
-    final expected = assertion.args['value'];
+    // The baseline hash is keyed `baseline` (ARCHITECTURE.md §4; the validator
+    // warns when it's absent). Reading any other key would silently always-fail.
+    final expected = assertion.args['baseline'];
     final observed = layoutHash(tree);
     final passed = expected == observed;
     results.add(
