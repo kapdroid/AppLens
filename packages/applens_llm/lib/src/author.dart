@@ -86,7 +86,8 @@ Graph _graphFromDraft(Map<String, Object?> json, String module) {
     ];
     final edges = [
       for (final e in (m['edges'] as List? ?? const []))
-        _edge((e as Map).cast<String, Object?>(), module),
+        if (((e as Map)['target'] as String?)?.isNotEmpty ?? false)
+          _edge(e.cast<String, Object?>(), module),
     ];
     nodes.add(Node(
       id: _qualify(m['id']! as String, module),

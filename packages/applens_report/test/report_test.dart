@@ -172,6 +172,10 @@ void main() {
     expect(exitCodeForRun(mixed), 1);
   });
 
+  test('escapeXml escapes both quote forms', () {
+    expect(escapeXml('a\'b"c<d>&'), 'a&#39;b&quot;c&lt;d&gt;&amp;');
+  });
+
   test('renderModule renders the module nodes as SVG', () {
     final svg = renderModule(_graph, 'shop');
     expect(svg, startsWith('<svg'));

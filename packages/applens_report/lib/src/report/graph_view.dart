@@ -96,9 +96,12 @@ String renderNeighborhood(
   return renderGraphSvg(graph, ids, focusId: focusId, failedIds: failedIds);
 }
 
-/// Minimal XML escaping for text embedded in SVG/HTML.
+/// Minimal XML escaping for text embedded in SVG/HTML. Escapes both quote forms
+/// so untrusted run data (node ids, commit messages, LLM reasoning) can't break
+/// out of any attribute, single- or double-quoted.
 String escapeXml(String value) => value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');

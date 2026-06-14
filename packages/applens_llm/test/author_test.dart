@@ -61,6 +61,31 @@ void main() {
     expect(welcome.args['value'], 'Welcome');
   });
 
+  test('an edge with no target is dropped, not emitted as a dangling app. id',
+      () async {
+    final graph = await author(
+      'home with a button that goes nowhere specified',
+      FakeLlmProvider(const LlmResult(json: {
+        'nodes': [
+          {
+            'id': 'home',
+            'edges': [
+              {'action': 'tap', 'key': 'btn_x'}, // no target
+            ],
+          },
+        ],
+      })),
+    );
+    expect(graph.byId['app.home']!.payload.edges, isEmpty);
+    // No node or edge target references the bare module prefix.
+    expect(graph.byId.keys, isNot(contains('app.')));
+    for (final node in graph.nodes) {
+      for (final edge in node.payload.edges) {
+        expect(edge.target, isNot('app.'));
+      }
+    }
+  });
+
   test('passes the request through the LlmProvider port (provider-agnostic)',
       () async {
     final provider = FakeLlmProvider(const LlmResult(json: {'nodes': []}));
