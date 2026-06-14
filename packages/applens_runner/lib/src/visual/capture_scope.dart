@@ -19,6 +19,14 @@ const String fullScreenCaptureTag = 'capture:full_screen';
 /// The anchor → rect resolution happens device-side at capture time: capture()
 /// crops the full-screen capture to that widget's painted bounds
 /// (`tester.getRect`). This function is the pure policy.
+/// The recorded [CaptureKind] for a derived [scope] — the form stored on a
+/// [VisualBaseline] so a recapture is compared at the same scope it was taken.
+CaptureKind captureKindOf(CaptureScope scope) => switch (scope) {
+      FullScreenScope() => CaptureKind.fullScreen,
+      WidgetScope() => CaptureKind.cropToWidget,
+      RegionScope() => CaptureKind.region,
+    };
+
 CaptureScope deriveCaptureScope(Node node) {
   if (node.payload.tags.contains(fullScreenCaptureTag)) {
     return const FullScreenScope();

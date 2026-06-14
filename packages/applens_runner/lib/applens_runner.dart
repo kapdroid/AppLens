@@ -6,6 +6,7 @@ library;
 export 'src/driver/driver.dart';
 export 'src/engine/frame_stabilizer.dart';
 export 'src/oracle/oracle.dart';
+export 'src/visual/baseline_recorder.dart';
 export 'src/visual/baseline_source.dart';
 
 // Runner loop: orchestrator + fingerprint seam. The pure run model, RunStore
