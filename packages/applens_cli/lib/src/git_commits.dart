@@ -54,7 +54,9 @@ class GitCommitSource implements CommitSource {
         if (line.contains(_unitSep))
           Commit(
             ref: line.split(_unitSep).first,
-            summary: line.split(_unitSep).last,
+            // Re-join the rest in case the subject itself contains the
+            // separator, so the summary isn't truncated.
+            summary: line.split(_unitSep).skip(1).join(_unitSep),
           ),
     ];
   }

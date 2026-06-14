@@ -392,19 +392,27 @@ class Orchestrator {
   /// wrong screen.
   Future<Fingerprint> _returnToStart(Graph graph, String start) async {
     var fingerprint = await fingerprints.capture();
-    var matched = matchNode(fingerprint, graph);
-    for (var pops = 0; matched != start && pops < _maxReturnPops; pops++) {
+    var signature = _fingerprintSignature(fingerprint);
+    for (var pops = 0;
+        matchNode(fingerprint, graph) != start && pops < _maxReturnPops;
+        pops++) {
       await driver.back();
       await driver.settle(settlePolicy);
       fingerprint = await fingerprints.capture();
-      final next = matchNode(fingerprint, graph);
-      if (next == matched) {
-        break; // back() changed nothing (e.g. already at the root) — give up
+      final next = _fingerprintSignature(fingerprint);
+      if (next == signature) {
+        // back() changed nothing observable (e.g. already at the root) — give
+        // up. Compares the whole fingerprint, not just the matched node, so two
+        // stacked screens that share a node id aren't mistaken for "stuck".
+        break;
       }
-      matched = next;
+      signature = next;
     }
     return fingerprint;
   }
+
+  String _fingerprintSignature(Fingerprint fp) =>
+      '${fp.route}|${(fp.anchors.toList()..sort()).join(',')}|${fp.overlay}';
 
   Future<List<Artifact>> _artifacts() async {
     // Tier-0 evidence: the serialized tree + a log placeholder. Full-screen

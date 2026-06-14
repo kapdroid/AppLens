@@ -64,6 +64,31 @@ Graph? _load(String dir, StringSink out) {
   }
 }
 
+/// Reads a run record from a `run.json`, returning null with a clear message on
+/// a missing/malformed file instead of letting an exception reach the user as a
+/// stack trace (a truncated `run.json` is a real CI scenario).
+RunRecord? _loadRunJson(String path, StringSink out) {
+  final file = File(path);
+  if (!file.existsSync()) {
+    out.writeln('no run file: $path');
+    return null;
+  }
+  try {
+    final decoded = jsonDecode(file.readAsStringSync());
+    if (decoded is! Map) {
+      out.writeln('run file $path is not a JSON object');
+      return null;
+    }
+    return RunRecord.fromMap(decoded.cast<String, Object?>());
+  } on FormatException catch (error) {
+    out.writeln('run file $path is not valid JSON: ${error.message}');
+    return null;
+  } on TypeError {
+    out.writeln('run file $path is missing required run fields');
+    return null;
+  }
+}
+
 /// Builds the configured LLM provider from `--provider/--model/--api-key-env`
 /// (BYO-key — the key is read from the environment, never a flag). Returns null
 /// with a message when the provider is unknown or the key is unset. Shared by
@@ -214,18 +239,18 @@ class _ReportCommand extends _Base {
     final RunRecord? record;
     if (rest[1].endsWith('.json')) {
       // The on-device path: a run serialized off the device via flutter drive.
-      record = RunRecord.fromMap(
-        (jsonDecode(File(rest[1]).readAsStringSync()) as Map)
-            .cast<String, Object?>(),
-      );
+      record = _loadRunJson(rest[1], out);
+      if (record == null) {
+        return 1; // _loadRunJson already explained why
+      }
     } else {
       final store = SqliteRunStore.open(rest[1]);
       record = await store.loadRun(argResults!.option('run-id')!);
       await store.close();
-    }
-    if (record == null) {
-      out.writeln('no run "${argResults!.option('run-id')}" in ${rest[1]}');
-      return 1;
+      if (record == null) {
+        out.writeln('no run "${argResults!.option('run-id')}" in ${rest[1]}');
+        return 1;
+      }
     }
     TriageReport? triage;
     final triagePath = argResults!.option('triage');
@@ -285,14 +310,8 @@ class _TriageCommand extends _Base {
     }
     final graph = _load(rest[0], out);
     if (graph == null) return 1;
-    if (!File(rest[1]).existsSync()) {
-      out.writeln('no run file: ${rest[1]}');
-      return 1;
-    }
-    final record = RunRecord.fromMap(
-      (jsonDecode(File(rest[1]).readAsStringSync()) as Map)
-          .cast<String, Object?>(),
-    );
+    final record = _loadRunJson(rest[1], out);
+    if (record == null) return 1;
 
     final provider = _provider ?? _buildProvider();
     if (provider == null) return 64;

@@ -177,6 +177,26 @@ void main() {
     expect(code, 1);
   });
 
+  test('report on a malformed run.json fails cleanly, not with a stack trace',
+      () async {
+    final tmp = Directory.systemTemp.createTempSync('applens_badrun_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final bad = '${tmp.path}/run.json';
+    File(bad).writeAsStringSync('{"unexpected": "shape"}');
+
+    final (code, output) =
+        await _run(['report', _qaGraph, bad, '--out', '${tmp.path}/r.html']);
+    expect(code, 1);
+    expect(output, contains('run file'));
+  });
+
+  test('report on a missing run.json fails cleanly', () async {
+    final (code, output) =
+        await _run(['report', _qaGraph, '/no/such/run.json']);
+    expect(code, 1);
+    expect(output, contains('no run file'));
+  });
+
   test('run --dry-run prints the device commands without executing', () async {
     final (code, output) = await _run(['run', _qaGraph, '--dry-run']);
     expect(code, 0);
