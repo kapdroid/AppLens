@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -227,6 +228,24 @@ class AppLensWidgetDriver implements AppLensDriver {
   void _ensureHittable(Finder finder, WidgetSelector selector) {
     final center = tester.getCenter(finder);
     final target = tester.renderObject(finder);
+
+    // Allowing ancestor handlers (above) must not allow a *disabled* region: if
+    // an ancestor is an absorbing AbsorbPointer or an ignoring IgnorePointer,
+    // that ancestor (or an opaque node behind the ignored subtree) sits in the
+    // hit path and would otherwise read as a false pass — a tap that lands but
+    // never reaches the target. Treat it as not interactive.
+    for (RenderObject? ancestor = target.parent;
+        ancestor != null;
+        ancestor = ancestor.parent) {
+      if ((ancestor is RenderAbsorbPointer && ancestor.absorbing) ||
+          (ancestor is RenderIgnorePointer && ancestor.ignoring)) {
+        throw DriverException(
+          'cannot tap ${describeSelector(selector)}: it is inside a disabled '
+          '(${_describeRenderObject(ancestor)}) region',
+        );
+      }
+    }
+
     final allowed = <RenderObject>{};
     void collect(RenderObject node) {
       allowed.add(node);

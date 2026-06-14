@@ -185,6 +185,94 @@ void main() {
     );
   });
 
+  testWidgets('tapping a widget inside an absorbing AbsorbPointer fails', (
+    tester,
+  ) async {
+    // The button is found and structurally on-screen, but an ancestor absorbs
+    // the pointer — the AbsorbPointer is what the hit test lands on. Allowing
+    // ancestor handlers must not turn this disabled region into a false pass.
+    var tapped = false;
+    await tester.pumpWidget(
+      _harness(
+        Center(
+          child: AbsorbPointer(
+            child: ElevatedButton(
+              key: const Key('disabled'),
+              onPressed: () => tapped = true,
+              child: const Text('Buy'),
+            ),
+          ),
+        ),
+      ),
+    );
+    final driver = AppLensWidgetDriver(tester);
+
+    await expectLater(
+      driver.tap(const KeySelector('disabled')),
+      throwsA(
+        isA<DriverException>().having(
+          (e) => e.message,
+          'message',
+          contains('disabled'),
+        ),
+      ),
+    );
+    expect(tapped, isFalse);
+  });
+
+  testWidgets('tapping a widget inside an ignoring IgnorePointer fails', (
+    tester,
+  ) async {
+    var tapped = false;
+    await tester.pumpWidget(
+      _harness(
+        Center(
+          child: IgnorePointer(
+            child: ElevatedButton(
+              key: const Key('disabled'),
+              onPressed: () => tapped = true,
+              child: const Text('Buy'),
+            ),
+          ),
+        ),
+      ),
+    );
+    final driver = AppLensWidgetDriver(tester);
+
+    await expectLater(
+      driver.tap(const KeySelector('disabled')),
+      throwsA(isA<DriverException>()),
+    );
+    expect(tapped, isFalse);
+  });
+
+  testWidgets('a non-absorbing AbsorbPointer still allows the tap', (
+    tester,
+  ) async {
+    // absorbing:false / ignoring:false are inert — they must not be treated as
+    // disabled regions (the guard checks the flag, not the widget type).
+    var tapped = false;
+    await tester.pumpWidget(
+      _harness(
+        Center(
+          child: AbsorbPointer(
+            absorbing: false,
+            child: ElevatedButton(
+              key: const Key('live'),
+              onPressed: () => tapped = true,
+              child: const Text('Buy'),
+            ),
+          ),
+        ),
+      ),
+    );
+    final driver = AppLensWidgetDriver(tester);
+
+    await driver.tap(const KeySelector('live'));
+    await driver.settle(const SettlePolicy());
+    expect(tapped, isTrue);
+  });
+
   testWidgets('tree() serializes keyed widgets', (tester) async {
     await tester.pumpWidget(
       _harness(const Center(child: Text('hi', key: Key('lbl')))),
