@@ -60,27 +60,33 @@ expensive), and the baseline storage layer (`baselineImageKey`,
 `IoBaselineSource`, `MapBaselineSource`). What remains before this gate is
 runnable on a device:
 
-### Built + green half verified on device
+### Built + verified on device (golden→green→red→green), then un-shipped
 
-The capture-record flow now exists and `shop.dashboard` carries a recorded
-full-screen baseline:
+The capture-record flow exists (`applens_record_entry.dart` + the shared
+flutter-drive driver content-addressing the captured PNGs). On `emulator-5554`
+the full cycle was verified: record `shop.dashboard` → tier-3 **green** →
+inject a colour change → **red** (85% diff, diff PNG) → revert → **green**.
 
-1. **Record** (already run on `emulator-5554`, producing the committed
-   `qa_graph/goldens/<sha>.png`):
-   ```bash
-   dart run applens_cli:applens run qa_graph \
-     --entrypoint integration_test/applens_record_entry.dart -d emulator-5554
-   # → build/applens/goldens/<sha>.png + baselines.manifest.json on the host
-   ```
-   The PNGs ride `binding.reportData` (like `run.json`); the shared
-   flutter-drive driver content-addresses them. The `VisualBaseline` is added
-   to the node YAML by the human (an intentional fixture here; a real app gets a
-   proposal approved via PR — §9). The goldens dir is bundled as assets so the
-   on-device run loads them through `MapBaselineSource`.
-2. **Green run — verified** (`run` + `report` both exit 0): `shop.dashboard`'s
-   tier-3 `visual_match` passed on the device. Tier 3 compares a golden on the
-   node's first reach only, so the multi-path re-visit (a transient ~1.4%
-   re-render the device surfaced) does not false-fail.
+> **A golden is device-specific — never ship one as a cross-platform CI
+> fixture.** The recorded `shop.dashboard` golden + its `visual_baselines` tag
+> were deliberately **reverted** from the committed example: the Gate A nightly
+> runs a *different* emulator (Ubuntu, API 34, software-rendered) whose dashboard
+> render differs from the API-37 golden, so a committed golden makes the nightly
+> red for reasons unrelated to any regression. (This is the exact fragility the
+> reviewers flagged and §8 records.) The `applens_entry` host stays tier-3
+> *capable* — it loads any bundled `qa_graph/goldens/` and enables
+> `MapBaselineSource` — but the example ships none, so tier 3 is inert there and
+> the nightly stays device-agnostic green.
+
+To reproduce Gate B on **your** device: run the record command below, add the
+emitted `VisualBaseline` to the node, bundle the golden, and run — all on the
+*same* device you will re-run on.
+
+```bash
+dart run applens_cli:applens run qa_graph \
+  --entrypoint integration_test/applens_record_entry.dart -d <your-device>
+# → build/applens/goldens/<sha>.png + baselines.manifest.json on the host
+```
 
 ### The remaining confirmation (human, on the emulator)
 

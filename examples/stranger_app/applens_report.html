@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>AppLens — run run</title>
+<style>body{font-family:system-ui,sans-serif;margin:2rem;color:#222}
+code{font-family:monospace}
+.meta{color:#666}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:.4rem .6rem;text-align:left}
+tr.passed{background:#eaf7ea}
+tr.failedSoft,tr.failedHard{background:#fdecea}
+tr.blocked{background:#fff4e5}
+tr.pending{background:#fffbe6}
+li.failedSoft,li.failedHard,li.blocked{color:#b00020}
+section.failure{border:1px solid #f0c0c0;border-radius:8px;padding:1rem;margin:1rem 0}
+section.pending{border:1px solid #e6d68a;border-radius:8px;padding:1rem;margin:1rem 0;background:#fffbe6}
+</style></head><body>
+<h1>AppLens run report</h1>
+<p class="meta">run <code>run</code> · strategy <code>smoke</code> · <code>sha256:b0f4fec4c749e901d534a946bceb987074f3a2f3c9bf6620a7ae74fe17cf15d7</code> · seed 0</p>
+<h2>Summary</h2><ul>
+<li>node coverage: 2/5 (40%)</li>
+<li class="passed">passed: 3</li>
+</ul>
+<h2>Visits</h2><table><thead><tr>
+<th>step</th><th>node</th><th>outcome</th><th>matched</th>
+</tr></thead><tbody>
+<tr class="passed"><td>0</td><td><code>shop.dashboard</code></td><td>passed</td><td>shop.dashboard</td></tr>
+<tr class="passed"><td>1</td><td><code>shop.catalog</code></td><td>passed</td><td>shop.catalog</td></tr>
+<tr class="passed"><td>2</td><td><code>shop.dashboard</code></td><td>passed</td><td>shop.dashboard</td></tr>
+</tbody></table>
+</body></html>
