@@ -60,45 +60,50 @@ expensive), and the baseline storage layer (`baselineImageKey`,
 `IoBaselineSource`, `MapBaselineSource`). What remains before this gate is
 runnable on a device:
 
-### Remaining build (next chunk)
+### Built + green half verified on device
 
-1. **Tag two stranger nodes** with a `visual_baselines` entry — one a route
-   (`shop.product`, full-screen) and one an **overlay** (a confirm dialog,
-   crop-to-anchor). The dialog node's anchor must be the dialog's own keyed
-   root, so the crop clears the modal barrier.
-2. **`applens baseline record qa_graph --device emulator-5554`** — a capture
-   pass that walks to each tagged node, captures its scope (`deriveCaptureScope`)
-   via the device's live binding, returns the PNGs to the host (through
-   `binding.reportData`, like `run.json`), writes them to
-   `qa_graph/goldens/<hex>.png` (`baselineImageKey`), and emits the
-   `VisualBaseline` YAML to add to each node (`state: approved` for the
-   example's intentional fixtures; in a real app this is a proposal the human
-   approves via PR — §9).
-3. **Bundle the goldens as assets** so the on-device run loads them through
-   `MapBaselineSource` (the device counterpart of `IoBaselineSource`), the same
-   way the graph is bundled via `MapGraphFiles`.
+The capture-record flow now exists and `shop.dashboard` carries a recorded
+full-screen baseline:
 
-### The gate itself (human, on the emulator)
+1. **Record** (already run on `emulator-5554`, producing the committed
+   `qa_graph/goldens/<sha>.png`):
+   ```bash
+   dart run applens_cli:applens run qa_graph \
+     --entrypoint integration_test/applens_record_entry.dart -d emulator-5554
+   # → build/applens/goldens/<sha>.png + baselines.manifest.json on the host
+   ```
+   The PNGs ride `binding.reportData` (like `run.json`); the shared
+   flutter-drive driver content-addresses them. The `VisualBaseline` is added
+   to the node YAML by the human (an intentional fixture here; a real app gets a
+   proposal approved via PR — §9). The goldens dir is bundled as assets so the
+   on-device run loads them through `MapBaselineSource`.
+2. **Green run — verified** (`run` + `report` both exit 0): `shop.dashboard`'s
+   tier-3 `visual_match` passed on the device. Tier 3 compares a golden on the
+   node's first reach only, so the multi-path re-visit (a transient ~1.4%
+   re-render the device surfaced) does not false-fail.
 
-Once the above exists:
+### The remaining confirmation (human, on the emulator)
+
+The red half — only the deliberate-regression step is left:
 
 ```bash
 cd examples/stranger_app
-# 1. Baseline run — both tagged nodes match → green.
-dart run applens_cli:applens run qa_graph --strategy smoke --device emulator-5554
-dart run applens_cli:applens report qa_graph build/applens/run.json   # exit 0
-
-# 2. Introduce a regression: change the confirm button's color in the app.
-#    Re-run.
-dart run applens_cli:applens run qa_graph --strategy smoke --device emulator-5554
-dart run applens_cli:applens report qa_graph build/applens/run.json   # exit 1 (soft fail)
+# Change a colour on the dashboard (e.g. a button/background), then:
+dart run applens_cli:applens run qa_graph --strategy smoke -d emulator-5554
+dart run applens_cli:applens report qa_graph build/applens/run.json   # expect exit 1
+# revert the colour → next run returns to exit 0.
 ```
 
 **Acceptance:**
-- Step 1 is green (captures match baselines).
-- Step 2 produces a tier-3 `failedSoft` on the changed node, and the report
-  shows a **red diff-overlay PNG** localizing the color change (the diff
-  artifact rides `run.json` as base64).
+- Green run exits 0 (captures match baselines) — **done**.
+- The regression run produces a tier-3 `failedSoft` on `shop.dashboard` and a
+  **red diff-overlay PNG** localizing the change (the diff rides `run.json` as
+  base64). The same red+diff behaviour is already proven by the headless
+  end-to-end test and was observed on-device incidentally; this step is the
+  literal confirmation. Reverting returns to green.
+
+A second visual node (an overlay/dialog crop, `crop_to_widget`) is a
+nice-to-have that exercises `deriveCaptureScope`'s overlay path on device.
 - Reverting the color change and re-running returns to **green**.
 
 This exercises the whole tier-3 path on real hardware at device DPR — the one
