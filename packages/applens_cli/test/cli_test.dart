@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:applens_cli/applens_cli.dart';
 import 'package:applens_core/applens_core.dart';
+import 'package:applens_llm/applens_llm.dart';
 import 'package:test/test.dart';
 
 Directory _repoDirContaining(String relative) {
@@ -163,5 +166,99 @@ void main() {
     final (code, output) = await _run(['run', _qaGraph, '--dry-run']);
     expect(code, 0);
     expect(output, contains('flutter drive'));
+  });
+
+  test('triage writes verdicts + proposals from an injected provider',
+      () async {
+    final tmp = Directory.systemTemp.createTempSync('applens_triage_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final runJson = '${tmp.path}/run.json';
+    File(runJson).writeAsStringSync(jsonEncode(
+      RunRecord(
+        id: 'run',
+        strategy: 'regression',
+        graphHash: 'h',
+        seed: 0,
+        visits: [
+          NodeVisit(
+            step: 0,
+            expectedNodeId: 'shop.dashboard',
+            matchedNodeId: 'shop.dashboard',
+            outcome: NodeOutcome.failedSoft,
+            assertions: const [
+              AssertionResult(
+                tierOrder: 30,
+                type: 'visual_match',
+                passed: false,
+                detail: '8.4% differ',
+              ),
+            ],
+            artifacts: [
+              Artifact(
+                kind: 'capture',
+                description: 'sha256:cand',
+                bytes: Uint8List.fromList([1]),
+              ),
+            ],
+          ),
+        ],
+      ).toMap(),
+    ));
+
+    final triageOut = '${tmp.path}/triage.json';
+    final buffer = StringBuffer();
+    final code = await AppLensCli(
+      out: buffer,
+      triageProvider: FakeLlmProvider(const LlmResult(json: {
+        'classification': 'intended',
+        'confidence': 0.9,
+        'reasoning': 'matches restyle abc123',
+        'causal_commit': 'abc123',
+      })),
+      triageCommits: const MapCommitSource({
+        'shop': [Commit(ref: 'abc123', summary: 'restyle app bar')],
+      }),
+    ).run([
+      'triage',
+      _qaGraph,
+      runJson,
+      '--provider',
+      'fake',
+      '--out',
+      triageOut
+    ]);
+
+    expect(code, 0); // advisory — triage never gates
+    expect(buffer.toString(), contains('1 proposal'));
+
+    final report = TriageReport.fromMap(
+        jsonDecode(File(triageOut).readAsStringSync()) as Map<String, Object?>);
+    expect(report.verdicts.single.classification, TriageClass.intended);
+    expect(report.verdicts.single.causalCommit, 'abc123');
+    expect(report.verdicts.single.provider, 'fake');
+    expect(report.proposals.single.baseline.image, 'sha256:cand');
+  });
+
+  test('triage without an API key and no injected provider fails cleanly',
+      () async {
+    final tmp = Directory.systemTemp.createTempSync('applens_triage_nokey_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final runJson = '${tmp.path}/run.json';
+    File(runJson).writeAsStringSync(jsonEncode(const RunRecord(
+      id: 'run',
+      strategy: 'smoke',
+      graphHash: 'h',
+      seed: 0,
+    ).toMap()));
+
+    final (code, output) = await _run([
+      'triage',
+      _qaGraph,
+      runJson,
+      '--api-key-env',
+      'APPLENS_DEFINITELY_UNSET_KEY',
+    ]);
+    expect(code, 64);
+    expect(output, contains('no API key'));
   });
 }

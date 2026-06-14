@@ -2,18 +2,30 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:applens_core/applens_core.dart';
+import 'package:applens_llm/applens_llm.dart';
 import 'package:applens_report/applens_report.dart';
 import 'package:args/command_runner.dart';
 import 'package:yaml/yaml.dart';
 
+import 'git_commits.dart';
 import 'templates.dart';
 
 /// The AppLens command-line entrypoint. Output is injected so commands are
-/// testable headless; each command returns a process exit code.
+/// testable headless; each command returns a process exit code. [triageProvider]
+/// and [triageCommits] are seams for testing `triage` without a live key or a
+/// git checkout — production builds them from flags and the environment.
 class AppLensCli {
-  AppLensCli({StringSink? out}) : _out = out ?? stdout;
+  AppLensCli({
+    StringSink? out,
+    LlmProvider? triageProvider,
+    CommitSource? triageCommits,
+  })  : _out = out ?? stdout,
+        _triageProvider = triageProvider,
+        _triageCommits = triageCommits;
 
   final StringSink _out;
+  final LlmProvider? _triageProvider;
+  final CommitSource? _triageCommits;
 
   Future<int> run(List<String> args) async {
     final runner = CommandRunner<int>(
@@ -25,7 +37,9 @@ class AppLensCli {
       ..addCommand(_GraphCommand(_out))
       ..addCommand(_ReportCommand(_out))
       ..addCommand(_InitCommand(_out))
-      ..addCommand(_RunCommand(_out));
+      ..addCommand(_RunCommand(_out))
+      ..addCommand(_TriageCommand(_out,
+          provider: _triageProvider, commits: _triageCommits));
     try {
       return await runner.run(args) ?? 0;
     } on UsageException catch (error) {
@@ -176,6 +190,111 @@ class _ReportCommand extends _Base {
     File(outPath).writeAsStringSync(renderRunReport(record, graph));
     out.writeln('✓ wrote $outPath');
     return exitCodeForRun(record);
+  }
+}
+
+class _TriageCommand extends _Base {
+  _TriageCommand(super.out, {LlmProvider? provider, CommitSource? commits})
+      : _provider = provider,
+        _commits = commits {
+    argParser
+      ..addOption('provider',
+          defaultsTo: 'claude', help: 'LLM provider: claude.')
+      ..addOption('model', defaultsTo: 'claude-opus-4-8')
+      ..addOption('api-key-env',
+          defaultsTo: 'ANTHROPIC_API_KEY',
+          help: 'Env var holding the provider API key (BYO-key).')
+      ..addOption('since',
+          help:
+              'Git ref of the last green run; commits since it are correlated.')
+      ..addOption('out', defaultsTo: 'triage.json');
+  }
+
+  final LlmProvider? _provider;
+  final CommitSource? _commits;
+
+  @override
+  String get name => 'triage';
+  @override
+  String get description =>
+      'Triage a run\'s failures with an LLM provider (advisory — writes '
+      'verdicts + baseline proposals to triage.json; never gates the run).';
+
+  @override
+  Future<int> run() async {
+    final rest = argResults!.rest;
+    if (rest.length < 2) {
+      out.writeln('usage: applens triage <qa_graph> <run.json> '
+          '[--provider] [--since] [--out]');
+      return 64;
+    }
+    final graph = _load(rest[0], out);
+    if (graph == null) return 1;
+    if (!File(rest[1]).existsSync()) {
+      out.writeln('no run file: ${rest[1]}');
+      return 1;
+    }
+    final record = RunRecord.fromMap(
+      (jsonDecode(File(rest[1]).readAsStringSync()) as Map)
+          .cast<String, Object?>(),
+    );
+
+    final provider = _provider ?? _buildProvider();
+    if (provider == null) return 64;
+    final commits = _commits ??
+        GitCommitSource(
+          sinceRef: argResults!.option('since'),
+          modulePaths: _modulePaths(rest[0]),
+        );
+
+    final report = await triageRun(
+      record,
+      graph,
+      commits,
+      provider,
+      providerName: argResults!.option('provider'),
+    );
+
+    final outPath = argResults!.option('out')!;
+    File(outPath).writeAsStringSync(
+        const JsonEncoder.withIndent('  ').convert(report.toMap()));
+    out.writeln('✓ triaged ${report.verdicts.length} failure(s), '
+        '${report.proposals.length} proposal(s) → $outPath');
+    // Advisory (ARCHITECTURE.md §9): triage never changes the run verdict.
+    // `applens report` still owns the pass/fail exit code.
+    return 0;
+  }
+
+  LlmProvider? _buildProvider() {
+    final kind = argResults!.option('provider');
+    if (kind != 'claude') {
+      out.writeln('unknown provider "$kind" (supported: claude)');
+      return null;
+    }
+    final envVar = argResults!.option('api-key-env')!;
+    final key = Platform.environment[envVar];
+    if (key == null || key.isEmpty) {
+      out.writeln('no API key in \$$envVar — set it (BYO-key) to run triage');
+      return null;
+    }
+    return ClaudeProvider(apiKey: key, model: argResults!.option('model')!);
+  }
+
+  /// Reads an optional `module_paths: {module: [glob, ...]}` map from the
+  /// graph's applens.yaml, used to scope `git log` per module.
+  Map<String, List<String>> _modulePaths(String qaGraphDir) {
+    final file = File('$qaGraphDir/applens.yaml');
+    if (!file.existsSync()) return const {};
+    final yaml = loadYaml(file.readAsStringSync());
+    final map = yaml is YamlMap ? yaml['module_paths'] : null;
+    if (map is! YamlMap) return const {};
+    return {
+      for (final entry in map.entries)
+        '${entry.key}': [
+          if (entry.value is YamlList)
+            for (final p in entry.value as YamlList) '$p',
+        ],
+    };
   }
 }
 
