@@ -25,12 +25,31 @@ class AppLensWidgetDriver implements AppLensDriver {
 
   final WidgetTester tester;
 
+  /// Runs a flutter_test [action], translating a framework failure into a
+  /// [DriverException] — the [AppLensDriver] contract's failure type. flutter_test
+  /// raises these as `Error`s, not `Exception`s: a `FlutterError` (e.g. a
+  /// `pumpAndSettle` timeout on a never-settling screen) or a `StateError` (e.g.
+  /// no focused `EditableText` for `enterText`). Both are *driver*-level faults —
+  /// the [action] closure only ever calls `tester.*` — so they are contained;
+  /// any other `Error` (a real programming bug) is rethrown so it still surfaces.
+  Future<T> _guard<T>(String what, Future<T> Function() action) async {
+    try {
+      return await action();
+    } on Error catch (error) {
+      if (error is FlutterError || error is StateError) {
+        throw DriverException('$what: $error');
+      }
+      rethrow;
+    }
+  }
+
   @override
   Future<void> tap(WidgetSelector selector) async {
     final finder = resolveSelector(selector);
     _ensureSingle(finder, selector);
     _ensureHittable(finder, selector);
-    await tester.tap(finder, warnIfMissed: false);
+    await _guard('tap ${describeSelector(selector)}',
+        () => tester.tap(finder, warnIfMissed: false));
   }
 
   @override
@@ -38,7 +57,8 @@ class AppLensWidgetDriver implements AppLensDriver {
     final finder = resolveSelector(selector);
     _ensureSingle(finder, selector);
     _ensureHittable(finder, selector);
-    await tester.longPress(finder, warnIfMissed: false);
+    await _guard('longPress ${describeSelector(selector)}',
+        () => tester.longPress(finder, warnIfMissed: false));
   }
 
   @override
@@ -46,7 +66,8 @@ class AppLensWidgetDriver implements AppLensDriver {
     final finder = resolveSelector(selector);
     _ensureSingle(finder, selector);
     // enterText drives the IME through TestTextInput — never synthetic key taps.
-    await tester.enterText(finder, text);
+    await _guard('enterText ${describeSelector(selector)}',
+        () => tester.enterText(finder, text));
   }
 
   @override
@@ -57,33 +78,37 @@ class AppLensWidgetDriver implements AppLensDriver {
         'scrollTo ${describeSelector(selector)}: no Scrollable on screen',
       );
     }
-    for (var i = 0; i < _maxScrolls; i++) {
-      if (finder.evaluate().isNotEmpty) {
-        await tester.ensureVisible(finder);
-        await tester.pumpAndSettle();
-        return;
+    // A framework FlutterError (e.g. an ensureVisible/pumpAndSettle timeout)
+    // becomes a DriverException; the DriverExceptions thrown below pass through.
+    await _guard('scrollTo ${describeSelector(selector)}', () async {
+      for (var i = 0; i < _maxScrolls; i++) {
+        if (finder.evaluate().isNotEmpty) {
+          await tester.ensureVisible(finder);
+          await tester.pumpAndSettle();
+          return;
+        }
+        // Advance every scrollable in its own axis — the one that builds the
+        // target reveals it, so we never have to guess which Scrollable is right
+        // (a secondary list/carousel before the target's no longer breaks this).
+        final scrollables = find.byType(Scrollable);
+        for (var s = 0; s < scrollables.evaluate().length; s++) {
+          final scrollable = tester.widget<Scrollable>(scrollables.at(s));
+          await tester.drag(
+              scrollables.at(s),
+              switch (scrollable.axisDirection) {
+                AxisDirection.down => const Offset(0, -_scrollStep),
+                AxisDirection.up => const Offset(0, _scrollStep),
+                AxisDirection.right => const Offset(-_scrollStep, 0),
+                AxisDirection.left => const Offset(_scrollStep, 0),
+              });
+        }
+        await tester.pump();
       }
-      // Advance every scrollable in its own axis — the one that builds the
-      // target reveals it, so we never have to guess which Scrollable is right
-      // (a secondary list/carousel before the target's no longer breaks this).
-      final scrollables = find.byType(Scrollable);
-      for (var s = 0; s < scrollables.evaluate().length; s++) {
-        final scrollable = tester.widget<Scrollable>(scrollables.at(s));
-        await tester.drag(
-            scrollables.at(s),
-            switch (scrollable.axisDirection) {
-              AxisDirection.down => const Offset(0, -_scrollStep),
-              AxisDirection.up => const Offset(0, _scrollStep),
-              AxisDirection.right => const Offset(-_scrollStep, 0),
-              AxisDirection.left => const Offset(_scrollStep, 0),
-            });
-      }
-      await tester.pump();
-    }
-    throw DriverException(
-      'scrollTo could not reveal ${describeSelector(selector)} '
-      'after $_maxScrolls scrolls',
-    );
+      throw DriverException(
+        'scrollTo could not reveal ${describeSelector(selector)} '
+        'after $_maxScrolls scrolls',
+      );
+    });
   }
 
   @override
@@ -100,7 +125,8 @@ class AppLensWidgetDriver implements AppLensDriver {
     if (navigator.evaluate().isEmpty) {
       throw const DriverException('back(): no Navigator on screen');
     }
-    await tester.state<NavigatorState>(navigator.first).maybePop();
+    await _guard(
+        'back', () => tester.state<NavigatorState>(navigator.first).maybePop());
   }
 
   @override
@@ -198,8 +224,10 @@ class AppLensWidgetDriver implements AppLensDriver {
     // Session 3: bounded pumpAndSettle. The full determinism kit (timeDilation
     // pinning, keyboard policy) and FrameStabilizer wiring land with the
     // orchestrator (Session 4) and capture (Session 7); SettlePolicy's fields
-    // are honored there.
-    await tester.pumpAndSettle();
+    // are honored there. A never-settling screen makes pumpAndSettle time out
+    // with a FlutterError — surface it as a DriverException so the orchestrator
+    // contains it rather than aborting the whole run.
+    await _guard('settle', () => tester.pumpAndSettle());
   }
 
   @override

@@ -78,6 +78,14 @@ class _ThrowingCaptureDriver extends FakeDriver {
       throw const DriverException('anchor not found at capture time');
 }
 
+/// A driver whose settle throws, modelling a never-settling screen — the real
+/// driver converts pumpAndSettle's FlutterError into exactly this DriverException.
+class _ThrowingSettleDriver extends FakeDriver {
+  @override
+  Future<void> settle(SettlePolicy policy) async =>
+      throw const DriverException('settle: pumpAndSettle timed out');
+}
+
 /// A FingerprintSource whose observation always throws, modelling the app
 /// tearing down its widget tree mid-walk.
 class _ThrowingFingerprints implements FingerprintSource {
@@ -225,6 +233,22 @@ void main() {
     // DriverException handling and abort the run. It must be contained to B.
     final record =
         await _orchestrator(FakeDriver(), [_fpA, _fpBpass]).run(_graph, plan);
+
+    expect(record.visits.first.outcome, NodeOutcome.passed); // start A
+    final b = record.visits.firstWhere((v) => v.expectedNodeId == 'B');
+    expect(b.outcome, NodeOutcome.failedHard);
+  });
+
+  test('a settle failure fails the node, not the whole run', () async {
+    final plan = _plan([
+      PlanPath(start: 'A', steps: [_tap('B', 'k_ab')]),
+    ]);
+    // settle throws after the tap (the real driver raises this DriverException
+    // when pumpAndSettle times out on a never-settling screen). It is contained
+    // as a hard failure for B; the run completes.
+    final record =
+        await _orchestrator(_ThrowingSettleDriver(), [_fpA, _fpBpass])
+            .run(_graph, plan);
 
     expect(record.visits.first.outcome, NodeOutcome.passed); // start A
     final b = record.visits.firstWhere((v) => v.expectedNodeId == 'B');
