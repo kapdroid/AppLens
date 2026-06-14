@@ -2,6 +2,7 @@
 /// Sidecar logic depends only on this port, never on a specific vendor.
 library;
 
+export 'src/author.dart';
 export 'src/claude_provider.dart';
 export 'src/commit_source.dart';
 export 'src/degrade.dart';
