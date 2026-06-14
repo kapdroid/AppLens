@@ -1,3 +1,4 @@
+import 'dart:io' show FileSystemException;
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
@@ -75,6 +76,22 @@ class _ThrowingCaptureDriver extends FakeDriver {
   @override
   Future<Capture> capture(CaptureScope scope) async =>
       throw const DriverException('anchor not found at capture time');
+}
+
+/// A FingerprintSource whose observation always throws, modelling the app
+/// tearing down its widget tree mid-walk.
+class _ThrowingFingerprints implements FingerprintSource {
+  @override
+  Future<Fingerprint> capture() async =>
+      throw const DriverException('no widget tree is mounted');
+}
+
+/// A BaselineSource whose load throws an IO error (not a DriverException),
+/// modelling an unreadable/removed golden file.
+class _ThrowingBaselines implements BaselineSource {
+  @override
+  Future<Uint8List?> load(VisualBaseline baseline) async =>
+      throw const FileSystemException('golden unreadable');
 }
 
 Node _node(String id, String route, {List<Assertion> assertions = const []}) =>
@@ -194,6 +211,43 @@ void main() {
     expect(record.visits[0].outcome, NodeOutcome.passed);
     expect(record.visits[1].expectedNodeId, 'B');
     expect(record.visits[1].outcome, NodeOutcome.failedHard);
+  });
+
+  test('an unsupported action (swipe) fails the node, not the whole run',
+      () async {
+    final plan = _plan([
+      PlanPath(
+        start: 'A',
+        steps: [const PlanStep(action: EdgeAction.swipe, to: 'B', key: 'k')],
+      ),
+    ]);
+    // _act throws UnimplementedError for swipe — an Error that would bypass the
+    // DriverException handling and abort the run. It must be contained to B.
+    final record =
+        await _orchestrator(FakeDriver(), [_fpA, _fpBpass]).run(_graph, plan);
+
+    expect(record.visits.first.outcome, NodeOutcome.passed); // start A
+    final b = record.visits.firstWhere((v) => v.expectedNodeId == 'B');
+    expect(b.outcome, NodeOutcome.failedHard);
+  });
+
+  test('a path whose observation throws is contained, not a run crash',
+      () async {
+    // fingerprints.capture() throws (app tore down its tree); the path can't be
+    // walked, but run() must still complete and save a record.
+    final record = await Orchestrator(
+      driver: FakeDriver(),
+      fingerprints: _ThrowingFingerprints(),
+      store: InMemoryRunStore(),
+    ).run(_graph, linear);
+
+    expect(record.visits, isNotEmpty);
+    expect(
+      record.visits
+          .any((v) => v.assertions.any((a) => a.type == 'walk_aborted')),
+      isTrue,
+    );
+    expect(record.visits.last.outcome, NodeOutcome.failedHard);
   });
 
   test('soft fail: assertion mismatch, run continues', () async {
@@ -496,7 +550,22 @@ void main() {
       // skipped, and the node's verdict rests on tier-1/2, which passed.
       expect(record.visits[1].outcome, NodeOutcome.passed);
       expect(tier3(record.visits[1]).skipped, isTrue);
-      expect(tier3(record.visits[1]).detail, contains('capture skipped'));
+      expect(tier3(record.visits[1]).detail, contains('skipped'));
+    });
+
+    test('a tier-3 baseline-load IO error is contained — skipped, not a crash',
+        () async {
+      final driver = FakeDriver(
+        capture: Capture(pngBytes: _png(8, 8, 1, 2, 3), width: 8, height: 8),
+      );
+      // baselines.load throws a FileSystemException (not a DriverException); the
+      // advisory tier-3 step must still be contained, leaving the verdict to
+      // tier-1/2.
+      final record = await orch(driver, _ThrowingBaselines(), [_fpA, _fpBpass])
+          .run(graphWithVisualB(), toB);
+
+      expect(record.visits[1].outcome, NodeOutcome.passed);
+      expect(tier3(record.visits[1]).skipped, isTrue);
     });
 
     test('tier 3 compares a node once per run, even when it is revisited',

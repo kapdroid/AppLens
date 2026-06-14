@@ -60,7 +60,31 @@ class Orchestrator {
     final visits = <NodeVisit>[];
     var step = 0;
     for (final path in plan.paths) {
-      step = await _walk(graph, plan, path, visits, step);
+      try {
+        step = await _walk(graph, plan, path, visits, step);
+      } on Exception catch (error) {
+        // A path's walk should contain its own per-node faults, but an
+        // unrecoverable one (e.g. the app tore down its widget tree, or there is
+        // no navigator to return to the start) must fail this path, not abort
+        // the whole run. Errors (programming bugs) still surface. Steps are
+        // monotonic, so continue past the highest one used so far.
+        final nextStep = visits.isEmpty ? step : visits.last.step + 1;
+        visits.add(NodeVisit(
+          step: nextStep,
+          expectedNodeId: path.start,
+          matchedNodeId: null,
+          outcome: NodeOutcome.failedHard,
+          assertions: [
+            AssertionResult(
+              tierOrder: 0,
+              type: 'walk_aborted',
+              passed: false,
+              detail: 'path could not be walked: $error',
+            ),
+          ],
+        ));
+        step = nextStep + 1;
+      }
     }
     final record = RunRecord(
       id: runId,
@@ -238,16 +262,17 @@ class Orchestrator {
               );
             }
           }
-        } on DriverException catch (error) {
-          // Tier-3 evidence collection is advisory: a capture failure (e.g. an
-          // overlay's anchor absent or duplicated at capture time) must never
-          // abort the run. Skip it so the node's verdict rests on tier-1/2.
+        } on Exception catch (error) {
+          // Tier-3 evidence collection is advisory: any failure here — a capture
+          // problem (overlay anchor absent/duplicated) or a baseline-load IO
+          // error — must never abort the run. Skip it so the node's verdict rests
+          // on tier-1/2. Errors (programming bugs) still surface.
           assertions.add(AssertionResult(
             tierOrder: tier3Order,
             type: 'visual_match',
             passed: true,
             skipped: true,
-            detail: 'tier-3 capture skipped: ${error.message}',
+            detail: 'tier-3 evidence skipped: $error',
           ));
         }
       }
@@ -373,25 +398,36 @@ class Orchestrator {
       return KeySelector(key);
     }
 
-    switch (planStep.action) {
-      case EdgeAction.tap:
-        await driver.tap(requireSelector());
-      case EdgeAction.longPress:
-        await driver.longPress(requireSelector());
-      case EdgeAction.enterText:
-        await driver.enterText(requireSelector(), planStep.text ?? '');
-      case EdgeAction.scrollTo:
-        await driver.scrollTo(requireSelector());
-      case EdgeAction.back:
-        await driver.back();
-      case EdgeAction.deepLink:
-        await driver.openDeepLink(Uri.parse(planStep.uri ?? ''));
-      case EdgeAction.swipe:
-        throw UnimplementedError(
-          'swipe edges carry no coordinates in the model yet; not used in v1 plans',
-        );
-      case EdgeAction.native:
-        await driver.native(const PermissionAction(''));
+    try {
+      switch (planStep.action) {
+        case EdgeAction.tap:
+          await driver.tap(requireSelector());
+        case EdgeAction.longPress:
+          await driver.longPress(requireSelector());
+        case EdgeAction.enterText:
+          await driver.enterText(requireSelector(), planStep.text ?? '');
+        case EdgeAction.scrollTo:
+          await driver.scrollTo(requireSelector());
+        case EdgeAction.back:
+          await driver.back();
+        case EdgeAction.deepLink:
+          await driver.openDeepLink(Uri.parse(planStep.uri ?? ''));
+        case EdgeAction.swipe:
+          throw UnimplementedError(
+            'swipe edges carry no coordinates in the model yet; '
+            'not used in v1 plans',
+          );
+        case EdgeAction.native:
+          await driver.native(const PermissionAction(''));
+      }
+    } on UnimplementedError {
+      // An action this v1 driver can't perform (swipe / deep_link / native) is
+      // an Error, not an Exception, so it would bypass the orchestrator's
+      // DriverException handling and abort the whole run. Surface it as a driver
+      // failure so the step is contained (failedHard + reroute) like any other.
+      throw DriverException(
+        '${planStep.action.yaml} is not supported by the v1 driver',
+      );
     }
   }
 
