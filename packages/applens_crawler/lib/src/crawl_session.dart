@@ -28,6 +28,9 @@ class CrawlBudget {
 /// Widget-key substrings that mark an action as destructive (delete/submit/pay).
 /// The crawler skips these unless explicitly allowed, so a crawl never places an
 /// order or wipes data (ARCHITECTURE.md §11).
+/// Matched against a widget key's *tokens* (split on separators and camelCase),
+/// not as raw substrings — so `btn_reorder` / `border` / `buyer` are not
+/// mistaken for destructive, while `transfer` / `wipe` are caught.
 const Set<String> defaultDestructiveKeywords = {
   'delete',
   'remove',
@@ -41,4 +44,11 @@ const Set<String> defaultDestructiveKeywords = {
   'send',
   'logout',
   'signout',
+  'transfer',
+  'withdraw',
+  'wipe',
+  'erase',
+  'cancel',
+  'destroy',
+  'discard',
 };

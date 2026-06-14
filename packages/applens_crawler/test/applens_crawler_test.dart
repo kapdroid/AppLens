@@ -185,6 +185,116 @@ void main() {
     final mirrorRoutes = _Stranger._keysByRoute.keys.toSet();
     expect(mirrorRoutes, containsAll(shopRoutes));
   });
+
+  test('destructive matching is tokenized: benign keys are still crawled', () {
+    // btn_reorder contains "order" and btn_transfer contains a real keyword;
+    // only the genuinely destructive one is skipped.
+    final session = _ScriptSession(_ScriptApp(
+      initial: 's0',
+      routeOf: {'s0': '/home', 's1': '/list'},
+      keysOf: {
+        's0': ['btn_reorder', 'btn_transfer'],
+        's1': [],
+      },
+      transitions: {('s0', 'btn_reorder'): 's1'},
+    ));
+
+    return crawl(session).then((result) {
+      expect(result.skippedDestructive, contains('btn_transfer'));
+      expect(result.skippedDestructive, isNot(contains('btn_reorder')));
+      expect(_routes(result.graph), contains('/list')); // reorder was explored
+    });
+  });
+
+  test('distinct states never collapse onto one node id', () {
+    // Three states; the third shares route /x with the first but has a
+    // different tree, and its generated id would collide with the second's
+    // (/x_2) under naive suffixing.
+    final session = _ScriptSession(_ScriptApp(
+      initial: 's0',
+      routeOf: {'s0': '/x', 's1': '/x_2', 's2': '/x'},
+      keysOf: {
+        's0': ['go1'],
+        's1': ['go2'],
+        's2': [],
+      },
+      transitions: {('s0', 'go1'): 's1', ('s1', 'go2'): 's2'},
+    ));
+
+    return crawl(session, module: 'm').then((result) {
+      expect(result.statesDiscovered, 3);
+      // No two distinct states collapsed: every state has its own node id.
+      expect(result.graph.byId.length, 3);
+      expect(result.graph.nodes.map((n) => n.id).toSet(), hasLength(3));
+    });
+  });
+}
+
+/// A general scripted app keyed by an internal state id (so two states can share
+/// a route yet stay distinct), used to exercise crawler edge cases.
+class _ScriptApp {
+  _ScriptApp({
+    required this.initial,
+    required this.routeOf,
+    required this.keysOf,
+    required this.transitions,
+  }) : state = initial;
+
+  final String initial;
+  final Map<String, String> routeOf;
+  final Map<String, List<String>> keysOf;
+  final Map<(String, String), String> transitions;
+  String state;
+
+  void reset() => state = initial;
+  void tap(String key) => state = transitions[(state, key)] ?? state;
+  String get route => routeOf[state]!;
+
+  WidgetTreeSnapshot tree() => WidgetTreeSnapshot(
+        SerializedWidget(
+          type: 'S_$state', // state id in the type → distinct tree per state
+          children: [
+            for (final key in keysOf[state] ?? const <String>[])
+              SerializedWidget(type: 'Button', key: key),
+          ],
+        ),
+      );
+}
+
+class _ScriptDriver implements AppLensDriver {
+  _ScriptDriver(this._app);
+  final _ScriptApp _app;
+  @override
+  Future<void> tap(WidgetSelector selector) async =>
+      _app.tap((selector as KeySelector).key);
+  @override
+  Future<WidgetTreeSnapshot> tree() async => _app.tree();
+  @override
+  Future<void> settle(SettlePolicy policy) async {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw const DriverException('not used by the crawler');
+}
+
+class _ScriptFp implements FingerprintSource {
+  _ScriptFp(this._app);
+  final _ScriptApp _app;
+  @override
+  Future<Fingerprint> capture() async => Fingerprint(route: _app.route);
+}
+
+class _ScriptSession implements CrawlSession {
+  _ScriptSession(this._app) {
+    driver = _ScriptDriver(_app);
+    fingerprint = _ScriptFp(_app);
+  }
+  final _ScriptApp _app;
+  @override
+  late final AppLensDriver driver;
+  @override
+  late final FingerprintSource fingerprint;
+  @override
+  Future<void> reset() async => _app.reset();
 }
 
 Directory _repoDirContaining(String relative) {

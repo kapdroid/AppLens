@@ -176,7 +176,12 @@ String _signature(Fingerprint fp, WidgetTreeSnapshot tree) =>
 String _uniqueId(String module, String? route, int n, Set<String> used) {
   final base = _routeSlug(route) ?? 's$n';
   var id = '$module.$base';
-  if (used.contains(id)) id = '$module.${base}_$n';
+  // Loop a suffix until the id is genuinely unused — reusing the global counter
+  // could collide with a different state whose slug already took that suffix,
+  // silently collapsing two distinct states into one node id.
+  for (var suffix = 2; used.contains(id); suffix++) {
+    id = '$module.${base}_$suffix';
+  }
   used.add(id);
   return id;
 }
@@ -202,9 +207,21 @@ List<String> _actionableKeys(WidgetTreeSnapshot tree) {
   return keys.toList()..sort();
 }
 
-bool _isDestructive(String key, Set<String> keywords) {
-  final lower = key.toLowerCase();
-  return keywords.any(lower.contains);
+bool _isDestructive(String key, Set<String> keywords) =>
+    _tokens(key).any(keywords.contains);
+
+/// Splits a widget key into lowercase word tokens on non-alphanumeric
+/// separators and camelCase boundaries, so destructive matching is by word, not
+/// substring (`reorder`/`border`/`buyer` ≠ `order`/`buy`).
+List<String> _tokens(String key) {
+  final spaced = key
+      .replaceAll(RegExp(r'[^a-zA-Z0-9]+'), ' ')
+      .replaceAllMapped(RegExp(r'([a-z0-9])([A-Z])'), (m) => '${m[1]} ${m[2]}')
+      .toLowerCase();
+  return [
+    for (final token in spaced.split(' '))
+      if (token.isNotEmpty) token,
+  ];
 }
 
 Graph _toGraph(
