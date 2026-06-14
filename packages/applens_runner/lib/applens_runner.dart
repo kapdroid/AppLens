@@ -15,3 +15,7 @@ export 'src/visual/proposal_source.dart';
 export 'src/run/fingerprint.dart';
 export 'src/run/orchestrator.dart';
 export 'src/run/widget_fingerprint_source.dart';
+
+// Tree-shape hash (tier-2): shared with the crawler's state clustering (§11),
+// so "tree shape" has one definition, not a fork.
+export 'src/run/tier2.dart' show layoutHash;

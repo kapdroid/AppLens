@@ -1,15 +1,19 @@
 name: applens_crawler
-description: Exploration engine and draft-graph generation (Phase 4). Stub at Session 0.
+description: Exploration engine and draft-graph generation (Phase 4).
 publish_to: none
 version: 0.1.0-dev
 environment:
   sdk: ^3.6.0
+  flutter: ">=3.27.0"
 resolution: workspace
 
 dependencies:
+  flutter:
+    sdk: flutter
+  flutter_test:
+    sdk: flutter
   applens_core: any # Workspace-resolved.
-  # applens_runner is added in Session 10, when the crawler actually drives the app.
+  applens_runner: any # Workspace-resolved; drives via AppLensDriver, reuses layoutHash.
 
 dev_dependencies:
-  lints: ^6.0.0
-  test: ^1.25.0
+  flutter_lints: ^6.0.0
