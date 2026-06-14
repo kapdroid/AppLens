@@ -505,6 +505,12 @@ void main() {
 
       expect(record.visits[1].outcome, NodeOutcome.failedSoft);
       expect(record.visits[1].artifacts.any((a) => a.kind == 'diff'), isTrue);
+      // The drifted capture is recorded, content-addressed, so triage can
+      // adopt it as a candidate golden if it judges the change intended (§9).
+      final capture =
+          record.visits[1].artifacts.firstWhere((a) => a.kind == 'capture');
+      expect(capture.description, startsWith('sha256:'));
+      expect(capture.bytes, pngOther);
     });
 
     test('a capture matching the approved baseline stays passed', () async {
