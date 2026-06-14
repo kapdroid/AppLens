@@ -67,6 +67,12 @@ class BaselineContext {
         'locale': locale,
         'theme': theme,
       };
+
+  factory BaselineContext.fromMap(Map<String, Object?> map) => BaselineContext(
+        device: map['device']! as String,
+        locale: map['locale']! as String,
+        theme: map['theme']! as String,
+      );
 }
 
 /// A tier-3 visual baseline keyed by (node, device, locale, theme),
@@ -108,4 +114,20 @@ class VisualBaseline {
         'reason_pr': reasonPr,
         'replaced': replaced,
       });
+
+  factory VisualBaseline.fromMap(Map<String, Object?> map) => VisualBaseline(
+        context: BaselineContext.fromMap(
+            (map['context']! as Map).cast<String, Object?>()),
+        capture: CaptureKind.fromYaml(map['capture']! as String) ??
+            CaptureKind.fullScreen,
+        state: BaselineState.fromYaml(map['state']! as String) ??
+            BaselineState.proposed,
+        widget: map['widget'] as String?,
+        image: map['image'] as String?,
+        mask: map['mask'] as String?,
+        threshold: (map['threshold'] as num?)?.toDouble(),
+        approvedBy: map['approved_by'] as String?,
+        reasonPr: map['reason_pr'] as String?,
+        replaced: map['replaced'] as String?,
+      );
 }

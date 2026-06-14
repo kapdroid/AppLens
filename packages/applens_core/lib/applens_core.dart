@@ -30,6 +30,7 @@ export 'src/validate/validator.dart';
 export 'src/run/run_model.dart';
 export 'src/run/run_store.dart';
 export 'src/run/sqlite_run_store.dart';
+export 'src/run/triage.dart';
 
 // Shared.
 export 'src/util/source_location.dart';

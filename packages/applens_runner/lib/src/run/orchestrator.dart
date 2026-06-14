@@ -194,6 +194,17 @@ class Orchestrator {
                 ),
               );
             }
+            // Record the drifted capture itself, content-addressed, so triage
+            // can propose it as the candidate golden if it judges the change
+            // intended (ARCHITECTURE.md §9). The diff overlay is evidence; this
+            // is the would-be baseline.
+            extraArtifacts.add(
+              Artifact(
+                kind: 'capture',
+                description: baselineImageKey(capture.pngBytes),
+                bytes: capture.pngBytes,
+              ),
+            );
           }
         }
       }

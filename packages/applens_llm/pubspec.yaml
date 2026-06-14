@@ -7,6 +7,7 @@ environment:
 resolution: workspace
 
 dependencies:
+  applens_core: any # workspace-resolved; run model, graph, triage data types.
   http: ^1.0.0 # Used by the network-backed adapters (Session 8.5).
 
 dev_dependencies:
