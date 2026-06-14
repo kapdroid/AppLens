@@ -305,6 +305,27 @@ void main() {
     expect(yaml, contains('app.settings'));
   });
 
+  test('author exits 1 with a message when the provider fails', () async {
+    final tmp = Directory.systemTemp.createTempSync('applens_author_fail_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final testFile = '${tmp.path}/case.txt';
+    File(testFile).writeAsStringSync('anything');
+    final draft = '${tmp.path}/draft.yaml';
+    final out = StringBuffer();
+
+    final code = await AppLensCli(
+      out: out,
+      // A draft missing the required `nodes` key makes author() re-validate and
+      // throw LlmException; the command must catch it, not crash the process.
+      authorProvider:
+          FakeLlmProvider(const LlmResult(json: {'wrong': 'shape'})),
+    ).run(['author', testFile, '--module', 'app', '--out', draft]);
+
+    expect(code, 1);
+    expect(out.toString(), contains('author failed'));
+    expect(File(draft).existsSync(), isFalse); // no draft written on failure
+  });
+
   test('crawl --dry-run prints the device command with crawl defines',
       () async {
     final (code, output) = await _run([

@@ -59,7 +59,15 @@ class ClaudeProvider implements LlmProvider {
       throw LlmException('Claude API ${response.statusCode}: ${response.body}');
     }
 
-    final decoded = jsonDecode(response.body);
+    // A 200 with a non-JSON body (proxy/WAF HTML, captive portal) must surface
+    // as an LlmException — the port's contract is that only LlmException escapes,
+    // so a provider failure stays advisory and never aborts the run.
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException catch (e) {
+      throw LlmException('Claude response was not JSON: ${e.message}');
+    }
     if (decoded is! Map) {
       throw const LlmException('Claude response was not a JSON object');
     }
@@ -67,12 +75,14 @@ class ClaudeProvider implements LlmProvider {
     final usage = decoded['usage'];
     return LlmResult(
       json: json,
-      inputTokens:
-          usage is Map ? (usage['input_tokens'] as num?)?.toInt() ?? 0 : 0,
-      outputTokens:
-          usage is Map ? (usage['output_tokens'] as num?)?.toInt() ?? 0 : 0,
+      inputTokens: usage is Map ? _asInt(usage['input_tokens']) : 0,
+      outputTokens: usage is Map ? _asInt(usage['output_tokens']) : 0,
     );
   }
+
+  /// Token counts default to 0 if the field is absent or not a number, so a
+  /// malformed `usage` block can't crash an otherwise-valid response.
+  int _asInt(Object? value) => value is num ? value.toInt() : 0;
 
   Map<String, Object?> _buildBody(LlmRequest request) {
     final systemParts = <String>[];
@@ -118,24 +128,33 @@ class ClaudeProvider implements LlmProvider {
     if (content is! List) {
       throw const LlmException('Claude response had no content blocks');
     }
-    final textBlock = content.whereType<Map<String, dynamic>>().firstWhere(
-          (block) => block['type'] == 'text',
-          orElse: () => throw const LlmException('Claude response had no text'),
-        );
-    final Object? parsed;
-    try {
-      parsed = jsonDecode(textBlock['text'] as String);
-    } on Object {
-      throw const LlmException('Claude output was not valid JSON');
+    // Try each text block, not just the first — models often emit a short prose
+    // block before the structured JSON one, even under output_config.format.
+    final texts = [
+      for (final block in content.whereType<Map<String, dynamic>>())
+        if (block['type'] == 'text' && block['text'] is String)
+          block['text'] as String,
+    ];
+    if (texts.isEmpty) {
+      throw const LlmException('Claude response had no text');
     }
-    if (parsed is! Map) {
-      throw const LlmException('Claude output was not a JSON object');
+    for (final text in texts) {
+      final Object? parsed;
+      try {
+        parsed = jsonDecode(text);
+      } on FormatException {
+        continue; // a prose preamble block; try the next
+      }
+      if (parsed is! Map) {
+        continue;
+      }
+      final json = parsed.cast<String, Object?>();
+      final errors = validateAgainstSchema(json, schema);
+      if (errors.isNotEmpty) {
+        throw LlmException('Claude output failed schema: ${errors.join('; ')}');
+      }
+      return json;
     }
-    final json = parsed.cast<String, Object?>();
-    final errors = validateAgainstSchema(json, schema);
-    if (errors.isNotEmpty) {
-      throw LlmException('Claude output failed schema: ${errors.join('; ')}');
-    }
-    return json;
+    throw const LlmException('Claude output had no valid JSON text block');
   }
 }

@@ -102,4 +102,67 @@ void main() {
     );
     expect(provider.complete(_request()), throwsA(isA<LlmException>()));
   });
+
+  test('a 200 with a non-JSON body throws LlmException (stays advisory)', () {
+    final provider = ClaudeProvider(
+      apiKey: 'sk-test',
+      httpClient: MockClient(
+        (_) async => http.Response('<html>captive portal</html>', 200),
+      ),
+    );
+    expect(provider.complete(_request()), throwsA(isA<LlmException>()));
+  });
+
+  test('non-numeric token usage degrades to 0 instead of crashing', () async {
+    final provider = ClaudeProvider(
+      apiKey: 'sk-test',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'content': [
+              {
+                'type': 'text',
+                'text': jsonEncode(
+                    {'verdict': 'bug', 'reasoning': 'no commit explains it'}),
+              },
+            ],
+            'usage': {'input_tokens': null, 'output_tokens': 'oops'},
+          }),
+          200,
+        ),
+      ),
+    );
+
+    final result = await provider.complete(_request());
+
+    expect(result.json['verdict'], 'bug');
+    expect(result.inputTokens, 0);
+    expect(result.outputTokens, 0);
+  });
+
+  test('a prose preamble block is skipped for the JSON block', () async {
+    final provider = ClaudeProvider(
+      apiKey: 'sk-test',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'content': [
+              {'type': 'text', 'text': 'Here is my analysis:'},
+              {
+                'type': 'text',
+                'text': jsonEncode(
+                    {'verdict': 'intended', 'reasoning': 'restyle PR'}),
+              },
+            ],
+            'usage': {'input_tokens': 100, 'output_tokens': 20},
+          }),
+          200,
+        ),
+      ),
+    );
+
+    final result = await provider.complete(_request());
+
+    expect(result.json['verdict'], 'intended');
+  });
 }

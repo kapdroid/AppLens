@@ -93,4 +93,13 @@ void main() {
     expect(provider.lastRequest, isNotNull);
     expect(provider.lastRequest!.jsonSchema, authorNodeSchema);
   });
+
+  test('re-validates: a draft missing required nodes throws LlmException',
+      () async {
+    // A misbehaving adapter returns JSON without the required `nodes` key; the
+    // port says this can't happen, but author() re-validates so it degrades to
+    // an LlmException instead of crashing in _graphFromDraft with a TypeError.
+    final provider = FakeLlmProvider(const LlmResult(json: {'wrong': 'shape'}));
+    expect(author('anything', provider), throwsA(isA<LlmException>()));
+  });
 }

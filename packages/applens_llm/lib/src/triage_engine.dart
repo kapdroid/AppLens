@@ -4,6 +4,7 @@ import 'commit_source.dart';
 import 'degrade.dart';
 import 'evidence.dart';
 import 'provider.dart';
+import 'schema.dart';
 
 /// The schema every triage verdict must validate against — the provider-neutral
 /// contract that survives a vendor swap (ARCHITECTURE.md §12).
@@ -69,6 +70,13 @@ Future<TriageVerdict> classify(
   final result = await provider
       .complete(degradeForCapabilities(request, provider.capabilities));
   final json = result.json;
+  // Defense in depth: the port says complete() returns schema-valid output, but
+  // re-check before the typed reads so a non-validating adapter degrades to an
+  // (advisory) LlmException instead of crashing the run with a TypeError.
+  final errors = validateAgainstSchema(json, triageVerdictSchema);
+  if (errors.isNotEmpty) {
+    throw LlmException('triage verdict failed schema: ${errors.join('; ')}');
+  }
   return TriageVerdict(
     nodeId: evidence.nodeId,
     classification: TriageClass.fromName(json['classification']! as String) ??

@@ -52,6 +52,23 @@ class _ThrowingProvider implements LlmProvider {
       throw const LlmException('provider down');
 }
 
+/// A misbehaving adapter that returns JSON violating the verdict schema (here,
+/// the required `confidence` is missing). The port's contract says this can't
+/// happen, but classify() re-validates so a buggy adapter degrades to an
+/// (advisory) LlmException instead of crashing the run with a TypeError.
+class _SchemaViolatingProvider implements LlmProvider {
+  @override
+  LlmCapabilities get capabilities =>
+      const LlmCapabilities(vision: true, jsonMode: true, maxContextTokens: 1);
+
+  @override
+  Future<LlmResult> complete(LlmRequest request) async =>
+      const LlmResult(json: {
+        'classification': 'bug',
+        'reasoning': 'no confidence field',
+      });
+}
+
 Node _node(String id, {String? route, bool visual = false}) => Node(
       id: id,
       identity: NodeIdentity(route: route),
@@ -175,6 +192,34 @@ void main() {
       expect(verdict.classification, TriageClass.intended);
       expect(verdict.causalCommit, 'abc123');
       expect(verdict.provider, 'fake');
+    });
+
+    test('re-validates: a schema-violating verdict throws LlmException',
+        () async {
+      final e = (await buildEvidence(
+        _run([_visualFailure('shop.dashboard')]),
+        _graph(),
+        const MapCommitSource({}),
+      ))
+          .single;
+
+      expect(
+        classify(e, _SchemaViolatingProvider()),
+        throwsA(isA<LlmException>()),
+      );
+    });
+
+    test('a schema-violating verdict is dropped by triageRun, not crashed',
+        () async {
+      final report = await triageRun(
+        _run([_visualFailure('shop.dashboard')]),
+        _graph(),
+        const MapCommitSource({}),
+        _SchemaViolatingProvider(),
+      );
+
+      expect(report.verdicts, isEmpty);
+      expect(report.proposals, isEmpty);
     });
 
     test('degrades to text-only for a no-vision provider', () async {

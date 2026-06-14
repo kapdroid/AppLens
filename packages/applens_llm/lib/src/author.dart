@@ -2,6 +2,7 @@ import 'package:applens_core/applens_core.dart';
 
 import 'degrade.dart';
 import 'provider.dart';
+import 'schema.dart';
 
 /// The schema an author draft must validate against — a set of proposed nodes
 /// with identity, tier-1 assertions, and edges. Provider-neutral, like triage.
@@ -69,6 +70,12 @@ Future<Graph> author(
   );
   final result = await provider
       .complete(degradeForCapabilities(request, provider.capabilities));
+  // Defense in depth: re-validate before building the draft, so a non-validating
+  // adapter surfaces an LlmException instead of crashing with a TypeError.
+  final errors = validateAgainstSchema(result.json, authorNodeSchema);
+  if (errors.isNotEmpty) {
+    throw LlmException('author draft failed schema: ${errors.join('; ')}');
+  }
   return _graphFromDraft(result.json, module);
 }
 

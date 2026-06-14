@@ -528,11 +528,17 @@ class _AuthorCommand extends _Base {
     final provider = _provider ?? _buildLlmProvider(argResults!, out, 'author');
     if (provider == null) return 64;
 
-    final graph = await author(
-      File(testFile).readAsStringSync(),
-      provider,
-      module: argResults!.option('module')!,
-    );
+    final Graph graph;
+    try {
+      graph = await author(
+        File(testFile).readAsStringSync(),
+        provider,
+        module: argResults!.option('module')!,
+      );
+    } on LlmException catch (error) {
+      out.writeln('author failed: ${error.message}');
+      return 1;
+    }
     final outPath = argResults!.option('out')!;
     File(outPath).writeAsStringSync(writeYaml(graph.toMap()));
     out.writeln('✓ drafted ${graph.nodes.length} node(s) → $outPath '
