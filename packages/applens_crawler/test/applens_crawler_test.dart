@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:applens_core/applens_core.dart';
 import 'package:applens_crawler/applens_crawler.dart';
 import 'package:applens_runner/applens_runner.dart';
@@ -158,4 +160,38 @@ void main() {
     final g = Graph(nodes: [_node('a', '/')], entryNodeIds: const ['a']);
     expect(driftReport(g, g).hasDrift, isFalse);
   });
+
+  test('the crawl is deterministic: same app → byte-identical draft', () async {
+    String draft(Graph g) => g.toMap().toString();
+    final first = await crawl(_StrangerSession(), module: 'shop');
+    final second = await crawl(_StrangerSession(), module: 'shop');
+    expect(draft(first.graph), draft(second.graph));
+  });
+
+  test('the scripted model still covers the real stranger graph routes', () {
+    // Guards against the in-test mirror drifting from the hand-written fixture:
+    // every non-destructive-gated route the real graph declares must be one the
+    // crawl can reach. (Loaded from the repo so a fixture edit fails loudly.)
+    final root = _repoDirContaining('examples/stranger_app/qa_graph');
+    final real = loadGraph('${root.path}/examples/stranger_app/qa_graph');
+    final realRoutes = {
+      for (final n in real.nodes)
+        if (n.identity.route != null) n.identity.route!,
+    }..remove('/confirm'); // only reachable via the destructive btn_place_order
+
+    final mirrorRoutes = _Stranger._keysByRoute.keys.toSet();
+    expect(mirrorRoutes, containsAll(realRoutes));
+  });
+}
+
+Directory _repoDirContaining(String relative) {
+  var dir = Directory.current;
+  while (true) {
+    if (Directory('${dir.path}/$relative').existsSync()) return dir;
+    final parent = dir.parent;
+    if (parent.path == dir.path) {
+      throw StateError('cannot locate "$relative"');
+    }
+    dir = parent;
+  }
 }

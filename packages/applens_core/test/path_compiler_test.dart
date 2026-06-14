@@ -115,21 +115,44 @@ void main() {
     expect(routes.length, cart.length, reason: 'alternates should be distinct');
   });
 
-  test('impact runs only the changed screens\' paths', () {
+  test('impact covers the changed screen and every edge into it', () {
     final plan = compilePlan(
       graph,
       strategy: PlanStrategy.impact,
       changedNodeIds: {'shop.cart'},
     );
-    // Exactly the affected screen is targeted — no unrelated path.
-    expect(plan.paths, hasLength(1));
-    expect(plan.paths.single.visited.last, 'shop.cart');
-    expect(plan.paths.single.start, isIn(graph.entryNodeIds));
+    // Every path targets the affected screen — nothing beyond it.
+    expect(plan.paths, isNotEmpty);
+    for (final path in plan.paths) {
+      expect(path.visited.last, 'shop.cart');
+      expect(path.start, isIn(graph.entryNodeIds));
+    }
+    // The two ways into the cart (from the dashboard and from a product) are
+    // both exercised — §6 "every edge into them".
+    final inboundKeys = {
+      for (final path in plan.paths)
+        if (path.steps.isNotEmpty) path.steps.last.key,
+    };
+    expect(inboundKeys, containsAll(['btn_view_cart', 'btn_add_to_cart']));
+    // The downstream confirm screen is never run.
+    expect(
+      plan.paths.expand((p) => p.visited),
+      isNot(contains('shop.confirm')),
+    );
   });
 
   test('impact with no changed nodes plans nothing', () {
     final plan = compilePlan(graph, strategy: PlanStrategy.impact);
     expect(plan.paths, isEmpty);
+  });
+
+  test('impact is deterministic: same change set → byte-identical plan', () {
+    String compile() => writeYaml(compilePlan(
+          graph,
+          strategy: PlanStrategy.impact,
+          changedNodeIds: {'shop.cart', 'shop.product'},
+        ).toMap());
+    expect(compile(), compile());
   });
 
   test('nodeIdsInModules expands a module to its node ids', () {

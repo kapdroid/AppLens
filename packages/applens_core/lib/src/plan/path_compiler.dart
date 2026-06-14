@@ -20,9 +20,9 @@ Set<String> nodeIdsInModules(Graph graph, Set<String> modules) => {
 /// Expects a graph that passes `validateGraph`. Deterministic: the same graph,
 /// strategy, and seed always produce a byte-identical plan. The `impact`
 /// strategy targets [changedNodeIds] — the nodes a PR's diff touched (the CLI
-/// resolves git-diff → modules → nodes) — and produces the shortest path to each
-/// so a PR runs only the affected screens. `soak` (seeded random walks) is not
-/// implemented yet.
+/// resolves git-diff → modules → nodes) — and covers each affected node and every
+/// edge into it, so a PR runs only the affected screens. `soak` (seeded random
+/// walks) is not implemented yet.
 Plan compilePlan(
   Graph graph, {
   required PlanStrategy strategy,
@@ -82,10 +82,13 @@ List<PlanPath> _smoke(
   return paths;
 }
 
-/// Shortest path to each node a PR touched ([changedNodeIds]), one path per
-/// impacted node, in sorted order — so an impact run executes only the affected
-/// screens' paths (ARCHITECTURE.md §6). Unknown or unreachable ids are skipped;
-/// an empty change set yields an empty plan (nothing impacted → nothing to run).
+/// Paths covering each node a PR touched ([changedNodeIds]) *and every edge into
+/// it* (ARCHITECTURE.md §6) — so an impact run exercises every way of reaching an
+/// affected screen, but nothing beyond the affected screens. For each impacted
+/// node: a trivial path if it is an entry, plus, for each inbound edge, the
+/// shortest path to that edge's source followed by the edge. Deterministic
+/// (nodes and inbound edges in sorted order); unreachable ids are skipped; an
+/// empty change set yields an empty plan (nothing impacted → nothing to run).
 List<PlanPath> _impact(
   Graph graph,
   List<String> entries,
@@ -93,13 +96,35 @@ List<PlanPath> _impact(
   Set<String> changedNodeIds,
 ) {
   final paths = <PlanPath>[];
+  final seen = <String>{};
+  void add(PlanPath path) {
+    final key = '${path.start}>${path.steps.map((s) => s.to).join('>')}';
+    if (seen.add(key)) paths.add(path);
+  }
+
   for (final id in nodeIds) {
-    if (!changedNodeIds.contains(id)) {
+    if (!changedNodeIds.contains(id) || !graph.byId.containsKey(id)) {
       continue;
     }
-    final reached = _bfsTo(graph, entries, (node) => node == id);
-    if (reached != null) {
-      paths.add(reached.toPlanPath());
+    var added = false;
+    if (entries.contains(id)) {
+      add(PlanPath(start: id));
+      added = true;
+    }
+    for (final hop in _inboundHops(graph, nodeIds, id)) {
+      final prefix = _bfsTo(graph, entries, (node) => node == hop.from);
+      if (prefix == null) {
+        continue;
+      }
+      add(PlanPath(
+          start: prefix.start, steps: [...prefix.steps(), hop.toStep()]));
+      added = true;
+    }
+    if (!added) {
+      // No covered inbound edge and not an entry — fall back to any shortest
+      // path so a reachable impacted node is still exercised.
+      final reached = _bfsTo(graph, entries, (node) => node == id);
+      if (reached != null) add(reached.toPlanPath());
     }
   }
   return paths;
