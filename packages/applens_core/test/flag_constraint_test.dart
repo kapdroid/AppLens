@@ -34,6 +34,14 @@ void main() {
       expect(_c('>0').raw, '>0');
     });
 
+    test('a comparison integer beyond int64 throws FormatException', () {
+      // The graph parser turns this into a located error; it must not escape as
+      // an opaque int.parse FormatException nor be mis-read as an exact match.
+      expect(() => _c('>99999999999999999999'), throwsFormatException);
+      expect(() => _c('<=-99999999999999999999'), throwsFormatException);
+      expect(() => _c('==99999999999999999999'), throwsFormatException);
+    });
+
     test('> maxInt and < minInt are unsatisfiable, not silently universal', () {
       // n+1 / n-1 would overflow at the int64 boundary and wrap to an unbounded
       // range that accepts everything — defeating ambiguity detection. Instead

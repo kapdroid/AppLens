@@ -7,8 +7,16 @@ import 'package:crypto/crypto.dart';
 /// significant). Used for content hashing and structural equality.
 Object? canonicalize(Object? value) {
   if (value is Map) {
-    final keys = value.keys.map((key) => key.toString()).toList()..sort();
-    return {for (final key in keys) key: canonicalize(value[key])};
+    // Sort entries by stringified key, but carry the *original* value — looking
+    // the value back up by the stringified key would miss any non-String key
+    // (e.g. an int-keyed map), silently dropping it and making distinct data
+    // hash identically.
+    final entries = value.entries.toList()
+      ..sort((a, b) => a.key.toString().compareTo(b.key.toString()));
+    return {
+      for (final entry in entries)
+        entry.key.toString(): canonicalize(entry.value),
+    };
   }
   if (value is Iterable) {
     return value.map(canonicalize).toList();

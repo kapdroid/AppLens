@@ -12,7 +12,10 @@ sealed class FlagConstraint {
   /// The original YAML spelling, preserved for round-tripping.
   final String raw;
 
-  /// Parses the YAML string form of a flag constraint.
+  /// Parses the YAML string form of a flag constraint. Throws [FormatException]
+  /// if a comparison's integer is outside the signed-64-bit range (the graph
+  /// parser converts it into a located error); a bare non-numeric literal is an
+  /// exact match, never an error.
   factory FlagConstraint.parse(String input) {
     final text = input.trim();
     if (text == 'true') {
@@ -24,7 +27,12 @@ sealed class FlagConstraint {
     final comparison = _comparison.firstMatch(text);
     if (comparison != null) {
       final op = comparison.group(1)!;
-      final n = int.parse(comparison.group(2)!);
+      // tryParse, not parse: an out-of-int64-range literal must surface as a
+      // documented FormatException, not an opaque one that escapes the parser.
+      final n = int.tryParse(comparison.group(2)!);
+      if (n == null) {
+        throw FormatException('flag comparison integer is out of range', text);
+      }
       return switch (op) {
         // `> maxInt` / `< minInt` are unsatisfiable; produce a bounded-empty
         // range (low > high) rather than letting n±1 wrap to an unbounded one

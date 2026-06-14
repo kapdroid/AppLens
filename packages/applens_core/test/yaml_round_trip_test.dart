@@ -53,6 +53,21 @@ void main() {
     );
   });
 
+  test('an out-of-range flag comparison is a located parse error, not a crash',
+      () {
+    const bad = 'id: x\n'
+        'identity:\n'
+        '  flags: { n: ">99999999999999999999" }\n';
+    expect(
+      () => parseNode(bad, source: 'bad.yaml'),
+      throwsA(
+        isA<GraphParseException>()
+            .having((e) => e.location.line, 'line', 3)
+            .having((e) => e.message, 'message', contains('out of range')),
+      ),
+    );
+  });
+
   test('a YAML syntax error reports a location', () {
     const broken = 'id: x\nidentity: [unclosed\n';
     expect(() => parseNode(broken, source: 'broken.yaml'),

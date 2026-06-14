@@ -134,9 +134,16 @@ Map<String, FlagConstraint> _parseFlags(_Reader reader) {
   }
   final flags = <String, FlagConstraint>{};
   flagsMap.nodes.forEach((key, valueNode) {
-    flags[(key as Object).toString()] = FlagConstraint.parse(
-      _flagRaw(valueNode.value),
-    );
+    final FlagConstraint constraint;
+    try {
+      constraint = FlagConstraint.parse(_flagRaw(valueNode.value));
+    } on FormatException catch (error) {
+      reader.fail(
+        'invalid flag "${(key as Object)}": ${error.message}',
+        valueNode,
+      );
+    }
+    flags[(key as Object).toString()] = constraint;
   });
   return flags;
 }
