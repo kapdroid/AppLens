@@ -98,8 +98,10 @@ List<PlanPath> _impact(
   final paths = <PlanPath>[];
   final seen = <String>{};
   void add(PlanPath path) {
-    final key = '${path.start}>${path.steps.map((s) => s.to).join('>')}';
-    if (seen.add(key)) paths.add(path);
+    // Dedup by edge identity, not just the node sequence: two parallel inbound
+    // edges (same source and target, different action/key) are distinct ways in
+    // and must both be covered (§6 "every edge into it").
+    if (seen.add(_edgeIdentityKey(path))) paths.add(path);
   }
 
   for (final id in nodeIds) {
@@ -213,7 +215,13 @@ Map<String, List<PlanPath>> _alternates(
       continue;
     }
     candidates.sort((a, b) => _pathSortKey(a).compareTo(_pathSortKey(b)));
-    result[target] = candidates.take(k).toList();
+    // Alternates are *distinct reroute routes*: collapse parallel inbound edges
+    // (same node sequence, different action/key) to one, keeping the shortest.
+    final routes = <String>{};
+    result[target] = [
+      for (final candidate in candidates)
+        if (routes.add(_routeKey(candidate))) candidate,
+    ].take(k).toList();
   }
   return result;
 }
@@ -238,6 +246,18 @@ List<_Hop> _inboundHops(Graph graph, List<String> nodeIds, String target) {
 String _pathSortKey(PlanPath path) =>
     '${path.steps.length.toString().padLeft(6, '0')}|${path.start}|'
     '${path.steps.map((step) => step.to).join('>')}';
+
+/// Identity of a path's *route* — its start and the node sequence it visits,
+/// ignoring how each hop was taken. Two paths with the same route key reach the
+/// same screens the same way structurally.
+String _routeKey(PlanPath path) =>
+    '${path.start}>${path.steps.map((step) => step.to).join('>')}';
+
+/// Identity of a path including *how* each hop is taken (action + operands), so
+/// parallel edges between the same two nodes are distinguished.
+String _edgeIdentityKey(PlanPath path) =>
+    '${path.start}>${path.steps.map((step) => '${step.to}/${step.action.yaml}/'
+        '${step.key ?? ''}/${step.text ?? ''}/${step.uri ?? ''}').join('>')}';
 
 // --- Deterministic BFS ------------------------------------------------------
 

@@ -146,6 +146,44 @@ void main() {
     expect(plan.paths, isEmpty);
   });
 
+  test('impact covers parallel inbound edges (same source, different action)',
+      () {
+    // Two ways from the dashboard into the catalog: a tap and a long-press.
+    final parallel = Graph(
+      nodes: [
+        Node(
+          id: 'shop.dashboard',
+          identity: const NodeIdentity(route: '/'),
+          payload: const NodePayload(edges: [
+            Edge(action: EdgeAction.tap, target: 'shop.catalog', key: 'btn_go'),
+            Edge(
+                action: EdgeAction.longPress,
+                target: 'shop.catalog',
+                key: 'btn_go'),
+          ]),
+        ),
+        Node(
+            id: 'shop.catalog',
+            identity: const NodeIdentity(route: '/catalog'),
+            payload: const NodePayload()),
+      ],
+      entryNodeIds: const ['shop.dashboard'],
+    );
+    final plan = compilePlan(parallel,
+        strategy: PlanStrategy.impact, changedNodeIds: {'shop.catalog'});
+
+    expect(
+        plan.paths, hasLength(2)); // both inbound edges, not collapsed to one
+    expect(
+      plan.paths.map((p) => p.steps.last.action).toSet(),
+      {EdgeAction.tap, EdgeAction.longPress},
+    );
+
+    // The same edges, as alternates, collapse to one distinct route.
+    final smoke = compilePlan(parallel, strategy: PlanStrategy.smoke);
+    expect(smoke.alternateInboundPaths['shop.catalog'], hasLength(1));
+  });
+
   test('impact is deterministic: same change set → byte-identical plan', () {
     String compile() => writeYaml(compilePlan(
           graph,
