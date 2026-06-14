@@ -198,8 +198,17 @@ class _PlanCommand extends _Base {
       ...nodeIdsInModules(
           graph, argResults!.multiOption('changed-module').toSet()),
     };
-    final plan =
-        compilePlan(graph, strategy: strategy, changedNodeIds: changedNodeIds);
+    final Plan plan;
+    try {
+      plan = compilePlan(graph,
+          strategy: strategy, changedNodeIds: changedNodeIds);
+    } on UnimplementedError catch (error) {
+      // A valid-but-unimplemented strategy (soak) parses fine, so it slips past
+      // the unknown-strategy guard above; fail cleanly instead of a stack trace.
+      out.writeln('strategy "${argResults!.option('strategy')}" '
+          'is not implemented yet: ${error.message}');
+      return 64;
+    }
     final yaml = writeYaml(plan.toMap());
     final outPath = argResults!.option('out');
     if (outPath == null) {
