@@ -62,6 +62,13 @@ class _ScriptedFingerprints implements FingerprintSource {
   }
 }
 
+/// A driver whose tap always throws, modelling an absent/non-actionable widget.
+class _ThrowingTapDriver extends FakeDriver {
+  @override
+  Future<void> tap(WidgetSelector selector) async =>
+      throw const DriverException('no widget matches');
+}
+
 Node _node(String id, String route, {List<Assertion> assertions = const []}) =>
     Node(
       id: id,
@@ -164,6 +171,21 @@ void main() {
     );
     expect(record.visits.last.matchedNodeId, 'A');
     expect(driver.actionLog, contains('back')); // it popped to return to start
+  });
+
+  test('a step whose widget is absent is a hard failure, not a run crash',
+      () async {
+    final driver = _ThrowingTapDriver();
+    final plan = _plan([
+      PlanPath(start: 'A', steps: [_tap('B', 'k_ab')]),
+    ]);
+    // The tap throws; the app stays on A. The run must complete with a recorded
+    // hard failure for B rather than propagating the exception.
+    final record = await _orchestrator(driver, [_fpA, _fpA]).run(_graph, plan);
+
+    expect(record.visits[0].outcome, NodeOutcome.passed);
+    expect(record.visits[1].expectedNodeId, 'B');
+    expect(record.visits[1].outcome, NodeOutcome.failedHard);
   });
 
   test('soft fail: assertion mismatch, run continues', () async {

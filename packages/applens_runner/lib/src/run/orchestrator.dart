@@ -123,12 +123,20 @@ class Orchestrator {
         continue;
       }
 
-      await _act(planStep);
-      await driver.settle(settlePolicy);
+      var actionFailed = false;
+      try {
+        await _act(planStep);
+        await driver.settle(settlePolicy);
+      } on DriverException {
+        // The step couldn't execute (e.g. its widget is absent on this screen).
+        // Treat it as failing to reach the target — record evidence and reroute
+        // below — rather than letting the exception abort the whole run.
+        actionFailed = true;
+      }
       final fingerprint = await fingerprints.capture();
       final matched = matchNode(fingerprint, graph);
 
-      if (matched == planStep.to) {
+      if (!actionFailed && matched == planStep.to) {
         visits.add(
           await _evaluate(graph, planStep.to, fingerprint, step++, planStep.to),
         );
