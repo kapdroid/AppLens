@@ -211,12 +211,16 @@ bool _isDestructive(String key, Set<String> keywords) =>
     _tokens(key).any(keywords.contains);
 
 /// Splits a widget key into lowercase word tokens on non-alphanumeric
-/// separators and camelCase boundaries, so destructive matching is by word, not
-/// substring (`reorder`/`border`/`buyer` ≠ `order`/`buy`).
+/// separators, camelCase boundaries, and letter↔digit boundaries — so
+/// destructive matching is by word, not substring: `reorder`/`border`/`buyer` ≠
+/// `order`/`buy`, while `btn2pay`/`pay2` still surface `pay`. (All-caps glued
+/// keys like `PAYNOW` have no boundary and remain a known limitation.)
 List<String> _tokens(String key) {
   final spaced = key
       .replaceAll(RegExp(r'[^a-zA-Z0-9]+'), ' ')
       .replaceAllMapped(RegExp(r'([a-z0-9])([A-Z])'), (m) => '${m[1]} ${m[2]}')
+      .replaceAllMapped(RegExp(r'([a-zA-Z])([0-9])'), (m) => '${m[1]} ${m[2]}')
+      .replaceAllMapped(RegExp(r'([0-9])([a-zA-Z])'), (m) => '${m[1]} ${m[2]}')
       .toLowerCase();
   return [
     for (final token in spaced.split(' '))

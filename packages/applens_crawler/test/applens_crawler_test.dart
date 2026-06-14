@@ -206,6 +206,22 @@ void main() {
     });
   });
 
+  test('destructive matching splits letter/digit boundaries (btn2pay)', () {
+    final session = _ScriptSession(_ScriptApp(
+      initial: 's0',
+      routeOf: {'s0': '/home'},
+      keysOf: {
+        's0': ['btn2pay', 'open_filters'],
+      },
+      transitions: const {},
+    ));
+    return crawl(session).then((result) {
+      // "pay" surfaces from btn2pay via the digit boundary; open_filters does not.
+      expect(result.skippedDestructive, contains('btn2pay'));
+      expect(result.skippedDestructive, isNot(contains('open_filters')));
+    });
+  });
+
   test('distinct states never collapse onto one node id', () {
     // Three states; the third shares route /x with the first but has a
     // different tree, and its generated id would collide with the second's
