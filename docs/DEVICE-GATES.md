@@ -118,6 +118,36 @@ logical-vs-device-resolution flag, ARCHITECTURE §8).
 
 ---
 
+## Gate C — crawler graph bootstrap (Session 10, Phase 4)
+
+The crawler's logic is proven headless: `crawl()` discovers ≥80% of the stranger
+app's screens against a scripted state machine that mirrors its routes/keys, and
+skips destructive actions (`packages/applens_crawler/test`). The device gate is
+**confirmation that a real on-device crawl proposes ≥80% of the hand-written
+qa_graph's nodes** (BUILD-PLAN Session 10 acceptance).
+
+What it needs (the human checkpoint):
+
+1. A crawl entrypoint `integration_test/applens_crawl_entry.dart` that builds a
+   device `CrawlSession` (relaunch via the integration_test binding for `reset`,
+   the live `AppLensWidgetDriver` + the NavigatorObserver fingerprint source),
+   reads the `--dart-define`s (`APPLENS_CRAWL_MODULE/BUDGET/DEPTH/ALLOW_DESTRUCTIVE`),
+   runs `crawl(...)`, and transports the draft `Graph` (as `writeYaml(graph.toMap())`)
+   off-device the same way the run record rides back. (Not yet shipped — the
+   crawler engine is device-agnostic and headless-proven; this is the device glue.)
+2. `applens crawl --device emulator-5554` prints/executes:
+   `flutter drive --driver=test_driver/integration_test.dart`
+   `--target=integration_test/applens_crawl_entry.dart` with the crawl defines.
+   `--dry-run` prints the exact command (headless-checkable).
+3. Confirm the draft proposes ≥4 of the 5 stranger screens; a rerun crawl on a
+   changed app shows drift (`driftReport`). The draft is a PR — never auto-merged.
+
+`applens author <test-case.txt> --module shop --out draft.yaml` is the keyless
+counterpart (BYO-key, fully headless): prose → draft graph YAML for the same
+human-prune-and-PR workflow. No device needed.
+
+---
+
 ## Why these are deferred, not skipped
 
 BUILD-PLAN §3 says no Phase 2 work starts until Gate A passes; the lead

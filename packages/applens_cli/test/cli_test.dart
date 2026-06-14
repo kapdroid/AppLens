@@ -254,6 +254,52 @@ void main() {
     expect(report.proposals.single.baseline.image, 'sha256:cand');
   });
 
+  test('author drafts a graph YAML from a prose test case', () async {
+    final tmp = Directory.systemTemp.createTempSync('applens_author_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final testFile = '${tmp.path}/case.txt';
+    File(testFile)
+        .writeAsStringSync('From the home screen, tap Start to open settings.');
+    final draft = '${tmp.path}/draft.yaml';
+
+    final code = await AppLensCli(
+      out: StringBuffer(),
+      authorProvider: FakeLlmProvider(const LlmResult(json: {
+        'nodes': [
+          {
+            'id': 'home',
+            'route': '/',
+            'edges': [
+              {'action': 'tap', 'key': 'btn_start', 'target': 'settings'},
+            ],
+          },
+          {'id': 'settings', 'route': '/settings'},
+        ],
+      })),
+    ).run(['author', testFile, '--module', 'app', '--out', draft]);
+
+    expect(code, 0);
+    final yaml = File(draft).readAsStringSync();
+    expect(yaml, contains('nodes:'));
+    expect(yaml, contains('app.home'));
+    expect(yaml, contains('app.settings'));
+  });
+
+  test('crawl --dry-run prints the device command with crawl defines',
+      () async {
+    final (code, output) = await _run([
+      'crawl',
+      '--dry-run',
+      '--budget',
+      '12',
+      '--allow-destructive',
+    ]);
+    expect(code, 0);
+    expect(output, contains('flutter drive'));
+    expect(output, contains('APPLENS_CRAWL_BUDGET=12'));
+    expect(output, contains('APPLENS_CRAWL_ALLOW_DESTRUCTIVE=true'));
+  });
+
   test('triage without an API key and no injected provider fails cleanly',
       () async {
     final tmp = Directory.systemTemp.createTempSync('applens_triage_nokey_');

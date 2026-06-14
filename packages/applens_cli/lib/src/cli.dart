@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:applens_core/applens_core.dart';
 import 'package:applens_llm/applens_llm.dart';
 import 'package:applens_report/applens_report.dart';
+import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:yaml/yaml.dart';
 
@@ -19,13 +20,16 @@ class AppLensCli {
     StringSink? out,
     LlmProvider? triageProvider,
     CommitSource? triageCommits,
+    LlmProvider? authorProvider,
   })  : _out = out ?? stdout,
         _triageProvider = triageProvider,
-        _triageCommits = triageCommits;
+        _triageCommits = triageCommits,
+        _authorProvider = authorProvider;
 
   final StringSink _out;
   final LlmProvider? _triageProvider;
   final CommitSource? _triageCommits;
+  final LlmProvider? _authorProvider;
 
   Future<int> run(List<String> args) async {
     final runner = CommandRunner<int>(
@@ -39,7 +43,9 @@ class AppLensCli {
       ..addCommand(_InitCommand(_out))
       ..addCommand(_RunCommand(_out))
       ..addCommand(_TriageCommand(_out,
-          provider: _triageProvider, commits: _triageCommits));
+          provider: _triageProvider, commits: _triageCommits))
+      ..addCommand(_AuthorCommand(_out, provider: _authorProvider))
+      ..addCommand(_CrawlCommand(_out));
     try {
       return await runner.run(args) ?? 0;
     } on UsageException catch (error) {
@@ -56,6 +62,26 @@ Graph? _load(String dir, StringSink out) {
     out.writeln('parse error: $error');
     return null;
   }
+}
+
+/// Builds the configured LLM provider from `--provider/--model/--api-key-env`
+/// (BYO-key — the key is read from the environment, never a flag). Returns null
+/// with a message when the provider is unknown or the key is unset. Shared by
+/// the sidecar commands (triage, author).
+LlmProvider? _buildLlmProvider(
+    ArgResults args, StringSink out, String purpose) {
+  final kind = args.option('provider');
+  if (kind != 'claude') {
+    out.writeln('unknown provider "$kind" (supported: claude)');
+    return null;
+  }
+  final envVar = args.option('api-key-env')!;
+  final key = Platform.environment[envVar];
+  if (key == null || key.isEmpty) {
+    out.writeln('no API key in \$$envVar — set it (BYO-key) to run $purpose');
+    return null;
+  }
+  return ClaudeProvider(apiKey: key, model: args.option('model')!);
 }
 
 abstract class _Base extends Command<int> {
@@ -294,20 +320,8 @@ class _TriageCommand extends _Base {
     return 0;
   }
 
-  LlmProvider? _buildProvider() {
-    final kind = argResults!.option('provider');
-    if (kind != 'claude') {
-      out.writeln('unknown provider "$kind" (supported: claude)');
-      return null;
-    }
-    final envVar = argResults!.option('api-key-env')!;
-    final key = Platform.environment[envVar];
-    if (key == null || key.isEmpty) {
-      out.writeln('no API key in \$$envVar — set it (BYO-key) to run triage');
-      return null;
-    }
-    return ClaudeProvider(apiKey: key, model: argResults!.option('model')!);
-  }
+  LlmProvider? _buildProvider() =>
+      _buildLlmProvider(argResults!, out, 'triage');
 
   /// Reads an optional `module_paths: {module: [glob, ...]}` map from the
   /// graph's applens.yaml, used to scope `git log` per module.
@@ -458,6 +472,110 @@ class _RunConfig {
   const _RunConfig(this.appId, this.permissions);
   final String appId;
   final List<String> permissions;
+}
+
+class _AuthorCommand extends _Base {
+  _AuthorCommand(super.out, {LlmProvider? provider}) : _provider = provider {
+    argParser
+      ..addOption('module',
+          defaultsTo: 'app', help: 'Module the draft nodes belong to.')
+      ..addOption('provider',
+          defaultsTo: 'claude', help: 'LLM provider: claude.')
+      ..addOption('model', defaultsTo: 'claude-opus-4-8')
+      ..addOption('api-key-env',
+          defaultsTo: 'ANTHROPIC_API_KEY',
+          help: 'Env var holding the provider API key (BYO-key).')
+      ..addOption('out', defaultsTo: 'draft_graph.yaml');
+  }
+
+  final LlmProvider? _provider;
+
+  @override
+  String get name => 'author';
+  @override
+  String get description =>
+      'Draft qa_graph nodes from a prose test case via an LLM provider '
+      '(BYO-key; advisory — writes a draft graph for review, never gates).';
+
+  @override
+  Future<int> run() async {
+    final testFile =
+        requirePositional('author <test-file> [--module] [--out] [--provider]');
+    if (testFile == null) return 64;
+    if (!File(testFile).existsSync()) {
+      out.writeln('no test file: $testFile');
+      return 1;
+    }
+    final provider = _provider ?? _buildLlmProvider(argResults!, out, 'author');
+    if (provider == null) return 64;
+
+    final graph = await author(
+      File(testFile).readAsStringSync(),
+      provider,
+      module: argResults!.option('module')!,
+    );
+    final outPath = argResults!.option('out')!;
+    File(outPath).writeAsStringSync(writeYaml(graph.toMap()));
+    out.writeln('✓ drafted ${graph.nodes.length} node(s) → $outPath '
+        '(review, refine, and open a PR)');
+    return 0;
+  }
+}
+
+class _CrawlCommand extends _Base {
+  _CrawlCommand(super.out) {
+    argParser
+      ..addOption('device',
+          help: 'Target device id (`flutter -d`). Required on-device.')
+      ..addOption('entrypoint',
+          defaultsTo: 'integration_test/applens_crawl_entry.dart')
+      ..addOption('module', defaultsTo: 'app')
+      ..addOption('budget', defaultsTo: '40', help: 'Max states to discover.')
+      ..addOption('depth', defaultsTo: '8', help: 'Max replay depth.')
+      ..addOption('out', defaultsTo: 'build/applens/draft_graph.yaml')
+      ..addFlag('allow-destructive',
+          help: 'Permit delete/submit/pay actions during the crawl.')
+      ..addFlag('dry-run', help: 'Print the device command without executing.');
+  }
+
+  @override
+  String get name => 'crawl';
+  @override
+  String get description =>
+      'Explore the app on a device and propose a draft graph (needs an '
+      'emulator; the draft is a PR, never auto-merged).';
+
+  @override
+  Future<int> run() async {
+    final device = argResults!.option('device');
+    final entrypoint = argResults!.option('entrypoint')!;
+    // Crawl parameters reach the on-device entrypoint as dart-defines.
+    final flutterArgs = [
+      'drive',
+      '--driver=test_driver/integration_test.dart',
+      '--target=$entrypoint',
+      '--dart-define=APPLENS_CRAWL_MODULE=${argResults!.option('module')}',
+      '--dart-define=APPLENS_CRAWL_BUDGET=${argResults!.option('budget')}',
+      '--dart-define=APPLENS_CRAWL_DEPTH=${argResults!.option('depth')}',
+      '--dart-define=APPLENS_CRAWL_ALLOW_DESTRUCTIVE='
+          '${argResults!.flag('allow-destructive')}',
+      if (device != null) ...['-d', device],
+    ];
+    out.writeln('flutter ${flutterArgs.join(' ')}');
+
+    if (argResults!.flag('dry-run')) {
+      return 0;
+    }
+    if (device == null) {
+      out.writeln('✗ --device is required to crawl on an emulator/device');
+      return 64;
+    }
+    final result = await Process.run('flutter', flutterArgs);
+    out
+      ..writeln(result.stdout)
+      ..writeln(result.stderr);
+    return result.exitCode == 0 ? 0 : 1;
+  }
 }
 
 class _GraphCommand extends Command<int> {
