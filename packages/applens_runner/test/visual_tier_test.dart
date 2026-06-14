@@ -68,11 +68,13 @@ void main() {
     expect(result.diffPng, isNull);
   });
 
-  test('a size mismatch never matches', () {
+  test('a size mismatch never matches and says so', () {
     final result = evaluateTier3(
       actual: _capture(8, 8, 10, 20, 30),
       baselinePng: _png(4, 4, 10, 20, 30),
     );
     expect(result.assertion.passed, isFalse);
+    expect(result.assertion.detail, contains('size'));
+    expect(result.assertion.detail, isNot(contains('-1px')));
   });
 }

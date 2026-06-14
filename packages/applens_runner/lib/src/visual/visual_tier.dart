@@ -44,15 +44,22 @@ VisualTierResult evaluateTier3({
   }
 
   final verdict = comparator.compare(actual.pngBytes, baselinePng);
+  final String detail;
+  if (verdict.matches) {
+    detail = '';
+  } else if (verdict.mismatchedPixels < 0) {
+    // Sentinel from the comparator: sizes differed or a PNG failed to decode.
+    detail = 'capture and baseline differ in size or could not be decoded';
+  } else {
+    detail = '${verdict.mismatchedPixels}px differ '
+        '(${(verdict.diffRatio * 100).toStringAsFixed(3)}%)';
+  }
   return VisualTierResult(
     assertion: AssertionResult(
       tierOrder: tier3Order,
       type: 'visual_match',
       passed: verdict.matches,
-      detail: verdict.matches
-          ? ''
-          : '${verdict.mismatchedPixels}px differ '
-              '(${(verdict.diffRatio * 100).toStringAsFixed(3)}%)',
+      detail: detail,
     ),
     diffPng: verdict.diffPng,
   );

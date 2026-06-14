@@ -1,5 +1,6 @@
 /// AppLens runner: the orchestrator, oracle tiers, and the DriverInterface with
-/// its first-party Flutter-SDK action engine. Depends only on applens_core.
+/// its first-party Flutter-SDK action engine. Depends on applens_core and, for
+/// the tier-3 pixel comparison, the standalone applens_compare (no fork — §14).
 library;
 
 export 'src/driver/driver.dart';

@@ -9,14 +9,16 @@ const String fullScreenCaptureTag = 'capture:full_screen';
 /// Derives *where* to capture a tagged node's baseline from the node's own
 /// identity — automatic, never hand-chosen per baseline (ARCHITECTURE.md §8):
 ///
-/// * Overlays (dialogs / sheets / snackbars) crop to their **anchor widget**,
-///   keyed — so the crop survives layout shifts and, crucially, ignores the
-///   full-screen modal barrier that a tree-diff would mistake for the surface.
+/// * Overlays (dialogs / sheets / snackbars) crop to their **anchor widget** —
+///   keyed, so the crop survives layout shifts; because the anchor resolves to
+///   the overlay's own keyed root (never the unkeyed modal barrier), the crop
+///   stays clear of the barrier.
 /// * Route nodes capture the full screen.
 /// * A composition-critical node may pin full screen with [fullScreenCaptureTag].
 ///
-/// The anchor → rect resolution happens device-side at capture time (capture.dart
-/// reads that widget's `RenderRepaintBoundary`); this function is the pure policy.
+/// The anchor → rect resolution happens device-side at capture time: capture()
+/// crops the full-screen capture to that widget's painted bounds
+/// (`tester.getRect`). This function is the pure policy.
 CaptureScope deriveCaptureScope(Node node) {
   if (node.payload.tags.contains(fullScreenCaptureTag)) {
     return const FullScreenScope();

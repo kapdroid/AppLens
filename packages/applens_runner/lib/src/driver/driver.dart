@@ -131,8 +131,9 @@ class Capture {
   final int height;
 }
 
-/// What region a [AppLensDriver.capture] grabs. Scope is derived from the tree
-/// diff at capture time, not hand-chosen (docs/ARCHITECTURE.md §8).
+/// What region a [AppLensDriver.capture] grabs. Derived from the node's identity
+/// (see deriveCaptureScope), not hand-chosen per baseline (docs/ARCHITECTURE.md
+/// §8).
 sealed class CaptureScope {
   const CaptureScope();
 }

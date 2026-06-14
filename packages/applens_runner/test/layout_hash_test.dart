@@ -71,6 +71,23 @@ void main() {
       );
     });
 
+    test('handles a mixed tree — root has geometry, a child does not', () {
+      // The real production shape: a box-backed root over a sliver/non-box
+      // child whose rect is null. Must stay deterministic and structure-aware.
+      WidgetTreeSnapshot mixed(String childType) => WidgetTreeSnapshot(
+            SerializedWidget(
+              type: 'Root',
+              rect: const Rect.fromLTWH(0, 0, 1200, 1200),
+              children: [
+                const SerializedWidget(type: 'Sliver'), // null rect
+                _w(childType),
+              ],
+            ),
+          );
+      expect(layoutHash(mixed('Text')), layoutHash(mixed('Text')));
+      expect(layoutHash(mixed('Text')), isNot(layoutHash(mixed('Icon'))));
+    });
+
     test('falls back to type/depth shape when geometry is absent', () {
       // No rects anywhere → still deterministic and structure-sensitive.
       const a = WidgetTreeSnapshot(SerializedWidget(type: 'Root', children: [

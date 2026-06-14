@@ -25,7 +25,7 @@ String layoutHash(WidgetTreeSnapshot tree, {int buckets = 12}) {
   final rootRect = tree.root.rect;
 
   int bucketOf(double value, double extent) =>
-      ((value / extent) * buckets).floor().clamp(0, buckets);
+      ((value / extent) * buckets).floor().clamp(0, buckets - 1);
 
   void visit(SerializedWidget widget, int depth) {
     shape
