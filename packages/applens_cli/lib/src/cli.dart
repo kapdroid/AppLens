@@ -106,7 +106,12 @@ class _ValidateCommand extends _Base {
 class _PlanCommand extends _Base {
   _PlanCommand(super.out) {
     argParser
-      ..addOption('strategy', defaultsTo: 'smoke', help: 'smoke | regression')
+      ..addOption('strategy',
+          defaultsTo: 'smoke', help: 'smoke | regression | impact')
+      ..addMultiOption('changed-module',
+          help: 'impact: a module a PR touched; its nodes become the targets.')
+      ..addMultiOption('changed-node',
+          help: 'impact: an exact node id a PR touched.')
       ..addOption('out', help: 'Write the plan YAML to this file.');
   }
   @override
@@ -116,7 +121,8 @@ class _PlanCommand extends _Base {
 
   @override
   Future<int> run() async {
-    final dir = requirePositional('plan <qa_graph> [--strategy] [--out]');
+    final dir = requirePositional(
+        'plan <qa_graph> [--strategy] [--changed-module] [--changed-node] [--out]');
     if (dir == null) {
       return 64;
     }
@@ -133,7 +139,13 @@ class _PlanCommand extends _Base {
       out.writeln('unknown strategy "${argResults!.option('strategy')}"');
       return 64;
     }
-    final plan = compilePlan(graph, strategy: strategy);
+    final changedNodeIds = <String>{
+      ...argResults!.multiOption('changed-node'),
+      ...nodeIdsInModules(
+          graph, argResults!.multiOption('changed-module').toSet()),
+    };
+    final plan =
+        compilePlan(graph, strategy: strategy, changedNodeIds: changedNodeIds);
     final yaml = writeYaml(plan.toMap());
     final outPath = argResults!.option('out');
     if (outPath == null) {

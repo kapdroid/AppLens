@@ -7,17 +7,29 @@ import 'plan.dart';
 /// The default tag whose nodes the smoke strategy must cover.
 const String defaultSmokeTag = 'sanity';
 
+/// The node ids belonging to any of [modules] — a node's module is the first
+/// segment of its hierarchical id (`shop.dashboard` → `shop`), ARCHITECTURE.md
+/// §5. The middle of impact's git-diff → modules → nodes chain.
+Set<String> nodeIdsInModules(Graph graph, Set<String> modules) => {
+      for (final id in graph.byId.keys)
+        if (modules.contains(id.split('.').first)) id,
+    };
+
 /// Compiles [graph] into a [Plan] under [strategy] (ARCHITECTURE.md §6).
 ///
 /// Expects a graph that passes `validateGraph`. Deterministic: the same graph,
-/// strategy, and seed always produce a byte-identical plan. `impact` and `soak`
-/// are not implemented until Session 10.
+/// strategy, and seed always produce a byte-identical plan. The `impact`
+/// strategy targets [changedNodeIds] — the nodes a PR's diff touched (the CLI
+/// resolves git-diff → modules → nodes) — and produces the shortest path to each
+/// so a PR runs only the affected screens. `soak` (seeded random walks) is not
+/// implemented yet.
 Plan compilePlan(
   Graph graph, {
   required PlanStrategy strategy,
   int seed = 0,
   int alternates = 2,
   String smokeTag = defaultSmokeTag,
+  Set<String> changedNodeIds = const {},
 }) {
   final entries = (graph.entryNodeIds.toSet().toList())..sort();
   final nodeIds = graph.byId.keys.toList()..sort();
@@ -25,19 +37,26 @@ Plan compilePlan(
   final paths = switch (strategy) {
     PlanStrategy.smoke => _smoke(graph, entries, nodeIds, smokeTag),
     PlanStrategy.regression => _regression(graph, entries, nodeIds),
-    PlanStrategy.impact || PlanStrategy.soak => throw UnimplementedError(
-        '${strategy.yaml} strategy is not implemented until Session 10 — see '
-        'ARCHITECTURE.md §6 (impact: git-diff → modules → nodes; soak: seeded '
-        'random walks).',
+    PlanStrategy.impact => _impact(graph, entries, nodeIds, changedNodeIds),
+    PlanStrategy.soak => throw UnimplementedError(
+        'soak strategy is not implemented yet — see ARCHITECTURE.md §6 '
+        '(seeded random walks).',
       ),
   };
+
+  // Alternates are reroute options for the nodes the plan will visit; an impact
+  // plan visits only the changed screens, so its alternates scope to them.
+  final alternateTargets = strategy == PlanStrategy.impact
+      ? (changedNodeIds.where(graph.byId.containsKey).toList()..sort())
+      : nodeIds;
 
   return Plan(
     strategy: strategy,
     graphHash: graph.contentHash,
     seed: seed,
     paths: paths,
-    alternateInboundPaths: _alternates(graph, entries, nodeIds, alternates),
+    alternateInboundPaths:
+        _alternates(graph, entries, alternateTargets, alternates),
   );
 }
 
@@ -53,6 +72,29 @@ List<PlanPath> _smoke(
   final paths = <PlanPath>[];
   for (final id in nodeIds) {
     if (!graph.byId[id]!.payload.tags.contains(smokeTag)) {
+      continue;
+    }
+    final reached = _bfsTo(graph, entries, (node) => node == id);
+    if (reached != null) {
+      paths.add(reached.toPlanPath());
+    }
+  }
+  return paths;
+}
+
+/// Shortest path to each node a PR touched ([changedNodeIds]), one path per
+/// impacted node, in sorted order — so an impact run executes only the affected
+/// screens' paths (ARCHITECTURE.md §6). Unknown or unreachable ids are skipped;
+/// an empty change set yields an empty plan (nothing impacted → nothing to run).
+List<PlanPath> _impact(
+  Graph graph,
+  List<String> entries,
+  List<String> nodeIds,
+  Set<String> changedNodeIds,
+) {
+  final paths = <PlanPath>[];
+  for (final id in nodeIds) {
+    if (!changedNodeIds.contains(id)) {
       continue;
     }
     final reached = _bfsTo(graph, entries, (node) => node == id);

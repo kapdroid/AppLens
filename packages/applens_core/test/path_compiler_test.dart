@@ -115,11 +115,31 @@ void main() {
     expect(routes.length, cart.length, reason: 'alternates should be distinct');
   });
 
-  test('impact and soak are unimplemented stubs', () {
-    expect(
-      () => compilePlan(graph, strategy: PlanStrategy.impact),
-      throwsUnimplementedError,
+  test('impact runs only the changed screens\' paths', () {
+    final plan = compilePlan(
+      graph,
+      strategy: PlanStrategy.impact,
+      changedNodeIds: {'shop.cart'},
     );
+    // Exactly the affected screen is targeted — no unrelated path.
+    expect(plan.paths, hasLength(1));
+    expect(plan.paths.single.visited.last, 'shop.cart');
+    expect(plan.paths.single.start, isIn(graph.entryNodeIds));
+  });
+
+  test('impact with no changed nodes plans nothing', () {
+    final plan = compilePlan(graph, strategy: PlanStrategy.impact);
+    expect(plan.paths, isEmpty);
+  });
+
+  test('nodeIdsInModules expands a module to its node ids', () {
+    final ids = nodeIdsInModules(graph, {'shop'});
+    expect(ids, contains('shop.cart'));
+    expect(ids.every((id) => id.startsWith('shop.')), isTrue);
+    expect(nodeIdsInModules(graph, {'nonexistent'}), isEmpty);
+  });
+
+  test('soak is still an unimplemented stub', () {
     expect(
       () => compilePlan(graph, strategy: PlanStrategy.soak),
       throwsUnimplementedError,

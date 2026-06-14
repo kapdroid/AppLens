@@ -46,6 +46,21 @@ void main() {
     expect(output, contains('graph_hash:'));
   });
 
+  test('plan --strategy impact targets only the changed module', () async {
+    final (code, output) = await _run([
+      'plan',
+      _qaGraph,
+      '--strategy',
+      'impact',
+      '--changed-node',
+      'shop.cart',
+    ]);
+    expect(code, 0);
+    expect(output, contains('strategy: "impact"'));
+    expect(output, contains('shop.cart'));
+    expect(output, isNot(contains('shop.confirm'))); // unaffected screen absent
+  });
+
   test('graph stats reports counts and the module', () async {
     final (code, output) = await _run(['graph', 'stats', _qaGraph]);
     expect(code, 0);
