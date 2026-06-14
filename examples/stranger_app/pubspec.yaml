@@ -21,6 +21,7 @@ dev_dependencies:
   # AppLens Tier-0 integration: dev-dependencies only, no production code touched.
   applens_core: any
   applens_runner: any
+  applens_crawler: any
   applens_cli: any
 
 # The qa_graph is bundled as assets so on-device runs can load it (the host CLI

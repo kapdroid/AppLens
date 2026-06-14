@@ -128,13 +128,18 @@ qa_graph's nodes** (BUILD-PLAN Session 10 acceptance).
 
 What it needs (the human checkpoint):
 
-1. A crawl entrypoint `integration_test/applens_crawl_entry.dart` that builds a
-   device `CrawlSession` (relaunch via the integration_test binding for `reset`,
-   the live `AppLensWidgetDriver` + the NavigatorObserver fingerprint source),
-   reads the `--dart-define`s (`APPLENS_CRAWL_MODULE/BUDGET/DEPTH/ALLOW_DESTRUCTIVE`),
-   runs `crawl(...)`, and transports the draft `Graph` (as `writeYaml(graph.toMap())`)
-   off-device the same way the run record rides back. (Not yet shipped — the
-   crawler engine is device-agnostic and headless-proven; this is the device glue.)
+1. The crawl entrypoint `integration_test/applens_crawl_entry.dart` (**shipped**)
+   builds a `CrawlSession` whose `reset()` re-pumps a fresh `StrangerApp` (after
+   unmounting, so the new Navigator starts at its initialRoute, not the prior
+   route stack) with a fresh `AppLensNavigatorObserver`, over the live
+   `AppLensWidgetDriver` + the NavigatorObserver fingerprint source. It reads the
+   `--dart-define`s (`APPLENS_CRAWL_MODULE/BUDGET/DEPTH/ALLOW_DESTRUCTIVE`), runs
+   `crawl(...)`, computes `driftReport` against the bundled approved graph, and
+   transports the draft graph + drift off-device via the integration_test
+   driver's `reportData` (the same channel the run record rides). The re-pump
+   session is headless-proven against the real app in
+   `examples/stranger_app/test/crawl_skeleton_test.dart` — the device run is
+   confirmation, not discovery.
 2. `applens crawl --device emulator-5554` prints/executes:
    `flutter drive --driver=test_driver/integration_test.dart`
    `--target=integration_test/applens_crawl_entry.dart` with the crawl defines.
