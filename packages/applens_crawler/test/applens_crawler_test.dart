@@ -222,6 +222,28 @@ void main() {
     });
   });
 
+  test('hybrid: long keywords match glued lowercase, short ones stay tokenized',
+      () {
+    // Fully-glued all-lowercase keys: a long keyword (submit/delete) is caught
+    // as a substring, but a short one (order/buy) and a substring-risk one
+    // (wipe ⊂ swipe) are not, so benign keys stay crawlable.
+    final session = _ScriptSession(_ScriptApp(
+      initial: 's0',
+      routeOf: {'s0': '/home'},
+      keysOf: {
+        's0': ['submitform', 'deleteall', 'reorder', 'buyer', 'swipecard'],
+      },
+      transitions: const {},
+    ));
+    return crawl(session).then((result) {
+      expect(
+          result.skippedDestructive, containsAll(['submitform', 'deleteall']));
+      for (final benign in ['reorder', 'buyer', 'swipecard']) {
+        expect(result.skippedDestructive, isNot(contains(benign)));
+      }
+    });
+  });
+
   test('distinct states never collapse onto one node id', () {
     // Three states; the third shares route /x with the first but has a
     // different tree, and its generated id would collide with the second's

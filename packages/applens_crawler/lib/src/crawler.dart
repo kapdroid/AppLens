@@ -207,14 +207,33 @@ List<String> _actionableKeys(WidgetTreeSnapshot tree) {
   return keys.toList()..sort();
 }
 
-bool _isDestructive(String key, Set<String> keywords) =>
-    _tokens(key).any(keywords.contains);
+/// Destructive keywords short or common enough to appear inside an innocent word
+/// (`buy`→buyer, `order`→reorder/border, `pay`→repay, `send`→resend,
+/// `wipe`→swipe), so they match only as whole word tokens, never as substrings.
+const Set<String> _wordBoundaryOnly = {'pay', 'buy', 'order', 'send', 'wipe'};
+
+/// Whether [key] names a destructive action. A keyword matches if it is a whole
+/// word token of the key (handles `submitForm` / `submit_form` / `btn2pay`),
+/// and — for the long, unambiguous keywords only — if it appears anywhere in the
+/// glued key (so all-lowercase `submitform` / `deleteall` / `confirmpay` are
+/// caught too). The short or substring-risky keywords in [_wordBoundaryOnly]
+/// stay token-only, so `buyer` / `reorder` / `border` / `swipe` stay tappable. A
+/// fully-glued key ending in a short keyword (e.g. `placeorder`) is the residual
+/// blind spot the human draft review backstops.
+bool _isDestructive(String key, Set<String> keywords) {
+  if (_tokens(key).any(keywords.contains)) {
+    return true;
+  }
+  final glued = key.toLowerCase();
+  return keywords
+      .where((keyword) => !_wordBoundaryOnly.contains(keyword))
+      .any(glued.contains);
+}
 
 /// Splits a widget key into lowercase word tokens on non-alphanumeric
 /// separators, camelCase boundaries, and letter↔digit boundaries — so
 /// destructive matching is by word, not substring: `reorder`/`border`/`buyer` ≠
-/// `order`/`buy`, while `btn2pay`/`pay2` still surface `pay`. (All-caps glued
-/// keys like `PAYNOW` have no boundary and remain a known limitation.)
+/// `order`/`buy`, while `btn2pay`/`pay2` still surface `pay`.
 List<String> _tokens(String key) {
   final spaced = key
       .replaceAll(RegExp(r'[^a-zA-Z0-9]+'), ' ')
