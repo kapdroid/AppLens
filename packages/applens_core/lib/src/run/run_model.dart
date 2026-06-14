@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 /// The outcome of visiting a node (ARCHITECTURE.md §7).
 enum NodeOutcome {
   /// Reached the node and every assertion held.
@@ -54,15 +57,28 @@ class AssertionResult {
 
 /// Failure evidence recorded for a visit (never compared against anything).
 class Artifact {
-  const Artifact({required this.kind, required this.description});
+  const Artifact({required this.kind, required this.description, this.bytes});
 
-  final String kind; // 'tree' | 'screenshot' | 'log'
+  final String kind; // 'tree' | 'screenshot' | 'diff' | 'log'
   final String description;
 
-  Map<String, Object?> toMap() => {'kind': kind, 'description': description};
+  /// Binary payload (e.g. a tier-3 red diff PNG). Base64-encoded in [toMap] so
+  /// it rides the same JSON transport device→host as the rest of the run.
+  final Uint8List? bytes;
+
+  Map<String, Object?> toMap() => {
+        'kind': kind,
+        'description': description,
+        if (bytes != null) 'bytes_b64': base64Encode(bytes!),
+      };
 
   factory Artifact.fromMap(Map<String, Object?> map) => Artifact(
-      kind: map['kind']! as String, description: map['description']! as String);
+        kind: map['kind']! as String,
+        description: map['description']! as String,
+        bytes: map['bytes_b64'] == null
+            ? null
+            : base64Decode(map['bytes_b64']! as String),
+      );
 }
 
 /// A recorded visit to a node during a run.

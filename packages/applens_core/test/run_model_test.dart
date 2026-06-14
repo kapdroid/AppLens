@@ -1,9 +1,25 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:applens_core/applens_core.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('Artifact carries binary payload across the JSON transport (base64)',
+      () {
+    final diff = Uint8List.fromList([0, 255, 1, 254, 128, 7]);
+    final artifact =
+        Artifact(kind: 'diff', description: '3px differ', bytes: diff);
+
+    final round = Artifact.fromMap(
+      (jsonDecode(jsonEncode(artifact.toMap())) as Map).cast<String, Object?>(),
+    );
+
+    expect(round.kind, 'diff');
+    expect(round.description, '3px differ');
+    expect(round.bytes, equals(diff));
+  });
+
   test('RunRecord round-trips through toMap/fromMap and JSON', () {
     const record = RunRecord(
       id: 'r',

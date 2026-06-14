@@ -1,6 +1,10 @@
+import 'package:applens_compare/applens_compare.dart';
 import 'package:applens_core/applens_core.dart';
 
 import '../driver/driver.dart';
+import '../visual/baseline_source.dart';
+import '../visual/capture_scope.dart';
+import '../visual/visual_tier.dart';
 import 'fingerprint.dart';
 import 'node_matcher.dart';
 import 'tier1.dart';
@@ -21,12 +25,22 @@ class Orchestrator {
     required this.fingerprints,
     required this.store,
     this.settlePolicy = const SettlePolicy(),
+    this.baselines,
+    this.captureContext,
   });
 
   final AppLensDriver driver;
   final FingerprintSource fingerprints;
   final RunStore store;
   final SettlePolicy settlePolicy;
+
+  /// Loads approved baseline images for tier 3. Null disables tier 3 entirely
+  /// (the default headless/no-visual config).
+  final BaselineSource? baselines;
+
+  /// The profile this run captures under. When null, any approved baseline
+  /// matches (single-profile v1); when set, a baseline's context must match.
+  final BaselineContext? captureContext;
 
   Future<RunRecord> run(Graph graph, Plan plan, {String runId = 'run'}) async {
     final visits = <NodeVisit>[];
@@ -118,29 +132,76 @@ class Orchestrator {
   ) async {
     final node = graph.byId[expected]!;
     final assertions = evaluateTier1(node, fingerprint);
-    final tier1Failed = assertions.any((a) => !a.skipped && !a.passed);
+    final extraArtifacts = <Artifact>[];
 
-    // Cheap-to-expensive: descend to the tier-2 layout hash only when tier 1
-    // held (the default short-circuit, ARCHITECTURE.md §8) and the node opts in
-    // with a layout_hash assertion. The tree is the more expensive observation,
-    // so it is fetched only when a tier-2 check will actually use it.
-    if (!tier1Failed && _wantsTier2(node)) {
+    // Cheap-to-expensive (ARCHITECTURE.md §8): descend a tier only when every
+    // cheaper tier held (the default short-circuit), and only when the node opts
+    // in. Each observation (tree, capture) is fetched lazily, where it's used.
+    if (!_anyFailed(assertions) && _wantsTier2(node)) {
       assertions.addAll(evaluateTier2(node, await driver.tree()));
     }
+    if (!_anyFailed(assertions)) {
+      final baseline = _approvedBaselineFor(node);
+      if (baseline != null) {
+        final capture = await driver.capture(deriveCaptureScope(node));
+        final result = evaluateTier3(
+          actual: capture,
+          baselinePng: await baselines!.load(baseline),
+          comparator: VisualComparator(
+            diffRatioThreshold: baseline.threshold ?? defaultDiffRatioThreshold,
+          ),
+        );
+        assertions.add(result.assertion);
+        if (result.diffPng != null) {
+          extraArtifacts.add(
+            Artifact(
+              kind: 'diff',
+              description: 'tier-3 ${node.id}: ${result.assertion.detail}',
+              bytes: result.diffPng,
+            ),
+          );
+        }
+      }
+    }
 
-    final failed = assertions.any((a) => !a.skipped && !a.passed);
+    final failed = _anyFailed(assertions);
     return NodeVisit(
       step: step,
       expectedNodeId: expected,
       matchedNodeId: matched,
       outcome: failed ? NodeOutcome.failedSoft : NodeOutcome.passed,
       assertions: assertions,
-      artifacts: failed ? await _artifacts() : const [],
+      artifacts: failed ? [...await _artifacts(), ...extraArtifacts] : const [],
     );
   }
 
+  bool _anyFailed(List<AssertionResult> results) =>
+      results.any((a) => !a.skipped && !a.passed);
+
   bool _wantsTier2(Node node) =>
       node.payload.assertions.any((a) => a.type == 'layout_hash');
+
+  /// The node's approved baseline matching the run's [captureContext] (any
+  /// approved baseline when the context is unset), or null if tier 3 is not
+  /// configured or the node has no approved baseline.
+  VisualBaseline? _approvedBaselineFor(Node node) {
+    if (baselines == null) {
+      return null;
+    }
+    for (final baseline in node.payload.visualBaselines) {
+      if (baseline.state != BaselineState.approved) {
+        continue;
+      }
+      final context = captureContext;
+      if (context == null ||
+          (baseline.context.device == context.device &&
+              baseline.context.locale == context.locale &&
+              baseline.context.theme == context.theme)) {
+        return baseline;
+      }
+    }
+    return null;
+  }
 
   Future<int?> _reroute(
     Graph graph,

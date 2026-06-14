@@ -1,10 +1,29 @@
+import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
 import 'package:applens_core/applens_core.dart';
 import 'package:applens_runner/applens_runner.dart';
 import 'package:applens_runner/src/driver/fake_driver.dart';
 import 'package:applens_runner/src/run/tier2.dart';
+import 'package:applens_runner/src/visual/visual_tier.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
+
+/// A solid-color PNG, the format both captures and baselines use.
+Uint8List _png(int w, int h, int r, int g, int b) {
+  final image = img.Image(width: w, height: h, numChannels: 4);
+  img.fill(image, color: img.ColorRgba8(r, g, b, 255));
+  return Uint8List.fromList(img.encodePng(image));
+}
+
+/// A BaselineSource that always returns the same image (or null = absent).
+class _FakeBaselines implements BaselineSource {
+  _FakeBaselines(this._png);
+  final Uint8List? _png;
+
+  @override
+  Future<Uint8List?> load(VisualBaseline baseline) async => _png;
+}
 
 /// A scripted [FingerprintSource]: returns each fingerprint in order, clamping
 /// at the last so over-reads are harmless.
@@ -263,6 +282,106 @@ void main() {
         record.visits[1].assertions.any((a) => a.tierOrder == tier2Order),
         isFalse,
       );
+    });
+  });
+
+  group('tier 3 (visual) wired into the loop', () {
+    const baselineMeta = VisualBaseline(
+      context: BaselineContext(device: 'host', locale: 'en', theme: 'light'),
+      capture: CaptureKind.fullScreen,
+      state: BaselineState.approved,
+      image: 'sha256:x',
+    );
+    Graph graphWithVisualB() => Graph(
+          nodes: [
+            _node('A', '/a'),
+            Node(
+              id: 'B',
+              identity: const NodeIdentity(route: '/b'),
+              payload: const NodePayload(
+                assertions: [
+                  Assertion(type: 'widget_exists', args: {'key': 'b_btn'})
+                ],
+                visualBaselines: [baselineMeta],
+              ),
+            ),
+          ],
+          entryNodeIds: ['A'],
+        );
+    final toB = _plan([
+      PlanPath(start: 'A', steps: [_tap('B', 'k_ab')]),
+    ]);
+
+    Orchestrator orch(
+      FakeDriver driver,
+      BaselineSource? baselines,
+      List<Fingerprint> frames,
+    ) =>
+        Orchestrator(
+          driver: driver,
+          fingerprints: _ScriptedFingerprints(frames),
+          store: InMemoryRunStore(),
+          baselines: baselines,
+        );
+
+    AssertionResult tier3(NodeVisit visit) =>
+        visit.assertions.singleWhere((a) => a.tierOrder == tier3Order);
+
+    test('a matching baseline passes tier 3', () async {
+      final png = _png(8, 8, 10, 20, 30);
+      final driver =
+          FakeDriver(capture: Capture(pngBytes: png, width: 8, height: 8));
+      final record = await orch(driver, _FakeBaselines(png), [_fpA, _fpBpass])
+          .run(graphWithVisualB(), toB);
+
+      expect(record.visits[1].outcome, NodeOutcome.passed);
+      expect(tier3(record.visits[1]).passed, isTrue);
+    });
+
+    test('a drifted baseline is a soft fail carrying the diff PNG', () async {
+      final driver = FakeDriver(
+        capture: Capture(pngBytes: _png(8, 8, 200, 0, 0), width: 8, height: 8),
+      );
+      final record = await orch(
+              driver, _FakeBaselines(_png(8, 8, 10, 20, 30)), [_fpA, _fpBpass])
+          .run(graphWithVisualB(), toB);
+
+      expect(record.visits[1].outcome, NodeOutcome.failedSoft);
+      expect(tier3(record.visits[1]).passed, isFalse);
+      final diff = record.visits[1].artifacts
+          .where((a) => a.kind == 'diff' && a.bytes != null);
+      expect(diff, hasLength(1));
+    });
+
+    test('a missing baseline image is skipped — not a silent pass or fail',
+        () async {
+      final driver = FakeDriver(
+        capture: Capture(pngBytes: _png(8, 8, 10, 20, 30), width: 8, height: 8),
+      );
+      final record = await orch(driver, _FakeBaselines(null), [_fpA, _fpBpass])
+          .run(graphWithVisualB(), toB);
+
+      expect(tier3(record.visits[1]).skipped, isTrue);
+      // Recorded, visible — and the node is not failed (you can't fail a
+      // comparison you couldn't run).
+      expect(record.visits[1].outcome, NodeOutcome.passed);
+    });
+
+    test('a tier-1 failure short-circuits tier 3 — no capture is taken',
+        () async {
+      final driver = FakeDriver(
+        capture: Capture(pngBytes: _png(8, 8, 10, 20, 30), width: 8, height: 8),
+      );
+      final record = await orch(
+              driver, _FakeBaselines(_png(8, 8, 10, 20, 30)), [_fpA, _fpBfail])
+          .run(graphWithVisualB(), toB);
+
+      expect(record.visits[1].outcome, NodeOutcome.failedSoft);
+      expect(
+        record.visits[1].assertions.any((a) => a.tierOrder == tier3Order),
+        isFalse,
+      );
+      expect(driver.actionLog, isNot(contains('capture')));
     });
   });
 
