@@ -88,11 +88,28 @@ class Orchestrator {
     // The returned observation is the start node's fingerprint (one capture when
     // already there, so a single-path walk's observation sequence is unchanged).
     final entryFingerprint = await _returnToStart(graph, path.start);
-    visits.add(
-      await _evaluate(graph, path.start, entryFingerprint, step++, path.start),
-    );
 
     var blocked = false;
+    if (matchNode(entryFingerprint, graph) != path.start) {
+      // Could not return to the path's start: record it as a hard failure and
+      // block the path, rather than evaluating the start node's assertions
+      // against whatever screen we ended up on.
+      visits.add(
+        NodeVisit(
+          step: step++,
+          expectedNodeId: path.start,
+          matchedNodeId: matchNode(entryFingerprint, graph),
+          outcome: NodeOutcome.failedHard,
+          artifacts: await _artifacts(),
+        ),
+      );
+      blocked = true;
+    } else {
+      visits.add(
+        await _evaluate(
+            graph, path.start, entryFingerprint, step++, path.start),
+      );
+    }
     for (final planStep in path.steps) {
       if (blocked) {
         visits.add(
@@ -242,7 +259,10 @@ class Orchestrator {
         baselinePng: await baselines!.load(proposal),
         comparator: _comparatorFor(proposal),
       );
-      if (result.assertion.passed) {
+      // A *skipped* tier-3 (the proposal's golden is absent from the store) is
+      // not a match — otherwise a missing proposal golden would silently
+      // downgrade a real regression from red to pending.
+      if (result.assertion.passed && !result.assertion.skipped) {
         return proposal;
       }
     }
@@ -291,9 +311,25 @@ class Orchestrator {
     var step = startStep;
     for (final alternate
         in plan.alternateInboundPaths[target] ?? const <PlanPath>[]) {
+      // An alternate is a full path from an entry, so it must be replayed from
+      // its start — but the failed step left the app on the wrong screen.
+      // Return to the alternate's start first; if we can't, try the next one.
+      final atStart = await _returnToStart(graph, alternate.start);
+      if (matchNode(atStart, graph) != alternate.start) {
+        continue;
+      }
+      var replayed = true;
       for (final planStep in alternate.steps) {
-        await _act(planStep);
+        try {
+          await _act(planStep);
+        } on DriverException {
+          replayed = false; // a step's widget isn't here; this alternate fails
+          break;
+        }
         await driver.settle(settlePolicy);
+      }
+      if (!replayed) {
+        continue;
       }
       final fingerprint = await fingerprints.capture();
       if (matchNode(fingerprint, graph) == target) {
@@ -348,12 +384,16 @@ class Orchestrator {
   /// wrong screen.
   Future<Fingerprint> _returnToStart(Graph graph, String start) async {
     var fingerprint = await fingerprints.capture();
-    for (var pops = 0;
-        matchNode(fingerprint, graph) != start && pops < _maxReturnPops;
-        pops++) {
+    var matched = matchNode(fingerprint, graph);
+    for (var pops = 0; matched != start && pops < _maxReturnPops; pops++) {
       await driver.back();
       await driver.settle(settlePolicy);
       fingerprint = await fingerprints.capture();
+      final next = matchNode(fingerprint, graph);
+      if (next == matched) {
+        break; // back() changed nothing (e.g. already at the root) — give up
+      }
+      matched = next;
     }
     return fingerprint;
   }

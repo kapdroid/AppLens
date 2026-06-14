@@ -195,11 +195,16 @@ void main() {
         ],
       },
     );
-    // entry A, step1 → B, step2 → nothing known (hard fail), reroute → C.
+    // entry A, step1 → B, step2 → stranded (hard fail). Reroute returns to the
+    // alternate's start: it observes the stranded screen, pops back() to A, then
+    // replays A→C. Frames: A, B, stranded, stranded(reset sees it), A(after pop),
+    // C(after replay).
     final record = await _orchestrator(driver, [
       _fpA,
       _fpBpass,
       _fpUnknown,
+      _fpUnknown,
+      _fpA,
       _fpCpass,
     ]).run(_graph, plan);
 
@@ -213,6 +218,37 @@ void main() {
     expect(record.visits[2].matchedNodeId, isNull);
     expect(record.visits[3].expectedNodeId, 'C');
     expect(driver.actionLog, contains('tap key "k_ac"'));
+    // Reroute returned to the alternate's start before replaying it.
+    expect(driver.actionLog, contains('back'));
+  });
+
+  test('a path whose start cannot be reached is blocked, not falsely passed',
+      () async {
+    // Two paths; after path 1 ends on B, path 2 can never get back to A
+    // (every observation stays B). A is route-only (no assertions), so without
+    // the guard it would falsely pass on B.
+    final graph = Graph(
+      nodes: [
+        _node('A', '/a'),
+        _node('B', '/b', assertions: [_exists('b')])
+      ],
+      entryNodeIds: ['A'],
+    );
+    final plan = _plan([
+      PlanPath(start: 'A', steps: [_tap('B', 'k_ab')]),
+      const PlanPath(start: 'A'),
+    ]);
+    const fpB = Fingerprint(route: '/b', anchors: {'b'});
+    // path1: A, B; path2: every capture is B (back never reaches A).
+    final record = await _orchestrator(
+      FakeDriver(),
+      [_fpA, fpB, fpB, fpB, fpB],
+    ).run(graph, plan);
+
+    // The second path's start is recorded as a hard failure, not a false pass.
+    expect(record.visits.last.expectedNodeId, 'A');
+    expect(record.visits.last.outcome, NodeOutcome.failedHard);
+    expect(record.visits.last.matchedNodeId, 'B');
   });
 
   test('unexpected transition: landed on a different known node', () async {
@@ -554,6 +590,32 @@ void main() {
           })).run(graphB(), toB);
 
       expect(record.visits[1].outcome, NodeOutcome.passed);
+    });
+
+    test('a proposal whose golden is missing does not mask a regression',
+        () async {
+      // The open proposal references a golden absent from the store, so tier-3
+      // against it is *skipped*. A skipped compare must NOT count as a match —
+      // the drift is a real regression (red), not pending.
+      const proposalMissing = VisualBaseline(
+        context: ctx,
+        capture: CaptureKind.fullScreen,
+        state: BaselineState.proposed,
+        image: 'sha256:MISSING',
+      );
+      final driver =
+          FakeDriver(capture: Capture(pngBytes: pngOther, width: 8, height: 8));
+      final record = await orch(
+          driver,
+          _FakeProposals({
+            'B': [proposalMissing]
+          })).run(graphB(), toB);
+
+      expect(record.visits[1].outcome, NodeOutcome.failedSoft);
+      expect(
+        record.visits[1].assertions.any((a) => a.type == 'visual_pending'),
+        isFalse,
+      );
     });
 
     test('no proposal source → a drift is plain red', () async {
