@@ -150,6 +150,9 @@ class _ReportCommand extends _Base {
   _ReportCommand(super.out) {
     argParser
       ..addOption('run-id', defaultsTo: 'run')
+      ..addOption('triage',
+          help:
+              'A triage.json (from `applens triage`) to fold into the report.')
       ..addOption('out', defaultsTo: 'applens_report.html');
   }
   @override
@@ -186,9 +189,23 @@ class _ReportCommand extends _Base {
       out.writeln('no run "${argResults!.option('run-id')}" in ${rest[1]}');
       return 1;
     }
+    TriageReport? triage;
+    final triagePath = argResults!.option('triage');
+    if (triagePath != null) {
+      if (!File(triagePath).existsSync()) {
+        out.writeln('no triage file: $triagePath');
+        return 1;
+      }
+      triage = TriageReport.fromMap(
+        (jsonDecode(File(triagePath).readAsStringSync()) as Map)
+            .cast<String, Object?>(),
+      );
+    }
     final outPath = argResults!.option('out')!;
-    File(outPath).writeAsStringSync(renderRunReport(record, graph));
+    File(outPath)
+        .writeAsStringSync(renderRunReport(record, graph, triage: triage));
     out.writeln('✓ wrote $outPath');
+    // Triage is advisory: the exit code reflects the run only (ARCHITECTURE.md §9).
     return exitCodeForRun(record);
   }
 }

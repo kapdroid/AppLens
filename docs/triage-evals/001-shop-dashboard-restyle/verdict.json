@@ -1,0 +1,6 @@
+{
+  "classification": "intended",
+  "confidence": 0.9,
+  "reasoning": "The app-bar color change matches commit abc123, which restyled the dashboard app bar to the brand palette and touched theme.dart. Layout is unchanged; this is a deliberate restyle, not a regression.",
+  "causal_commit": "abc123"
+}

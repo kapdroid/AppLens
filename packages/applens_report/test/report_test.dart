@@ -178,4 +178,83 @@ void main() {
     expect(svg, contains('shop.dashboard'));
     expect(svg, contains('shop.cart'));
   });
+
+  test('folds a triage report into failures, clusters, and the metric', () {
+    const run = RunRecord(
+      id: 'r',
+      strategy: 'regression',
+      graphHash: 'h',
+      seed: 0,
+      visits: [
+        NodeVisit(
+          step: 0,
+          expectedNodeId: 'shop.cart',
+          matchedNodeId: 'shop.cart',
+          outcome: NodeOutcome.failedSoft,
+          assertions: [
+            AssertionResult(tierOrder: 30, type: 'visual_match', passed: false),
+          ],
+        ),
+        NodeVisit(
+          step: 1,
+          expectedNodeId: 'shop.dashboard',
+          matchedNodeId: 'shop.dashboard',
+          outcome: NodeOutcome.failedSoft,
+          assertions: [
+            AssertionResult(tierOrder: 30, type: 'visual_match', passed: false),
+          ],
+        ),
+      ],
+    );
+    const triage = TriageReport(
+      verdicts: [
+        // cart was judged intended (sinks down); dashboard is a bug (rises).
+        TriageVerdict(
+          nodeId: 'shop.cart',
+          classification: TriageClass.intended,
+          confidence: 0.88,
+          reasoning: 'matches restyle',
+          causalCommit: 'abc123',
+          cluster: 'abc123',
+        ),
+        TriageVerdict(
+          nodeId: 'shop.dashboard',
+          classification: TriageClass.bug,
+          confidence: 0.91,
+          reasoning: 'no commit explains this',
+        ),
+      ],
+    );
+
+    final html = renderRunReport(run, _graph, triage: triage);
+
+    expect(html, contains('human-overturn rate 0%'));
+    expect(html, contains('p class="verdict bug"'));
+    expect(html, contains('p class="verdict intended"'));
+    expect(html, contains('Triage clusters'));
+    expect(html, contains('cause <code>abc123</code>'));
+    // Bug sorts before the intended change in the Failures section.
+    expect(html.indexOf('verdict bug'),
+        lessThan(html.indexOf('verdict intended')));
+  });
+
+  test('without a triage report the page is unchanged (advisory, opt-in)', () {
+    const run = RunRecord(
+      id: 'r',
+      strategy: 'smoke',
+      graphHash: 'h',
+      seed: 0,
+      visits: [
+        NodeVisit(
+          step: 0,
+          expectedNodeId: 'shop.dashboard',
+          matchedNodeId: 'shop.dashboard',
+          outcome: NodeOutcome.passed,
+        ),
+      ],
+    );
+    final html = renderRunReport(run, _graph);
+    expect(html, isNot(contains('triage:')));
+    expect(html, isNot(contains('Triage clusters')));
+  });
 }

@@ -1,0 +1,6 @@
+{
+  "classification": "bug",
+  "confidence": 0.85,
+  "reasoning": "A required action button disappeared and no recent commit touched the shop module to explain it. With no causal change, a vanished primary control is a regression, not an intended edit.",
+  "causal_commit": null
+}

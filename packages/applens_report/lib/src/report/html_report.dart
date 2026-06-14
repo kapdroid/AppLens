@@ -7,7 +7,13 @@ import 'graph_view.dart';
 /// self-locating path (`<node file>:payload.assertions[i]`) plus a rendered
 /// neighbourhood subgraph with the failing node in red (§5). No human ever has
 /// to search the other nodes.
-String renderRunReport(RunRecord run, Graph graph) {
+///
+/// When [triage] is supplied (from `applens triage`), failures are pre-sorted by
+/// verdict (bugs first), each is annotated with its advisory classification and
+/// cited commit, verdicts sharing a cause collapse into cluster cards, and the
+/// human-overturn rate is surfaced (§9). Triage is advisory — it never changes
+/// the run's pass/fail summary or the exit code.
+String renderRunReport(RunRecord run, Graph graph, {TriageReport? triage}) {
   final total = graph.nodes.length;
   final visited = {for (final visit in run.visits) visit.expectedNodeId};
   final counts = <NodeOutcome, int>{};
@@ -15,6 +21,9 @@ String renderRunReport(RunRecord run, Graph graph) {
     counts[visit.outcome] = (counts[visit.outcome] ?? 0) + 1;
   }
   final coverage = total == 0 ? 0 : (visited.length * 100 / total).round();
+  final verdicts = {
+    for (final v in triage?.verdicts ?? const <TriageVerdict>[]) v.nodeId: v,
+  };
 
   final out = StringBuffer()
     ..writeln('<!doctype html>')
@@ -34,6 +43,12 @@ String renderRunReport(RunRecord run, Graph graph) {
     if (count > 0) {
       out.writeln('<li class="${outcome.name}">${outcome.name}: $count</li>');
     }
+  }
+  if (triage != null) {
+    final rate = (triage.overturnRate * 100).round();
+    out.writeln('<li class="triage-metric">triage: '
+        '${triage.verdicts.length} verdict(s), ${triage.proposals.length} '
+        'proposal(s) · human-overturn rate $rate%</li>');
   }
   out
     ..writeln('</ul>')
@@ -58,6 +73,12 @@ String renderRunReport(RunRecord run, Graph graph) {
             v.outcome == NodeOutcome.failedHard,
       )
       .toList();
+  // Pre-sort by verdict so the most actionable failures (bugs, then un-triaged)
+  // come first; intended changes (which carry a proposal) sink to the bottom.
+  if (triage != null) {
+    failures.sort((a, b) => _verdictRank(verdicts[a.expectedNodeId])
+        .compareTo(_verdictRank(verdicts[b.expectedNodeId])));
+  }
   if (failures.isNotEmpty) {
     out.writeln('<h2>Failures</h2>');
     for (final visit in failures) {
@@ -88,6 +109,10 @@ String renderRunReport(RunRecord run, Graph graph) {
         out.writeln(
           '<p><code>${escapeXml(path)}</code> — expected node $landed</p>',
         );
+      }
+      final verdict = verdicts[visit.expectedNodeId];
+      if (verdict != null) {
+        out.writeln(_verdictBadge(verdict));
       }
       out
         ..writeln(
@@ -129,8 +154,64 @@ String renderRunReport(RunRecord run, Graph graph) {
     }
   }
 
+  if (triage != null) {
+    _renderClusters(out, triage);
+  }
+
   out.writeln('</body></html>');
   return out.toString();
+}
+
+/// Sort key for failures: bug (0) before un-triaged (1) before flake (2) before
+/// intended (3) — most actionable first.
+int _verdictRank(TriageVerdict? verdict) {
+  switch (verdict?.classification) {
+    case TriageClass.bug:
+      return 0;
+    case null:
+      return 1;
+    case TriageClass.flake:
+      return 2;
+    case TriageClass.intended:
+      return 3;
+  }
+}
+
+String _verdictBadge(TriageVerdict verdict) {
+  final pct = (verdict.confidence * 100).round();
+  final commit = verdict.causalCommit == null
+      ? ''
+      : ' · commit <code>${escapeXml(verdict.causalCommit!)}</code>';
+  return '<p class="verdict ${verdict.classification.name}">'
+      'triage: <strong>${verdict.classification.name}</strong> ($pct%)$commit'
+      '<br>${escapeXml(verdict.reasoning)}</p>';
+}
+
+/// Renders verdicts grouped by cause: each cluster is one confirm card so forty
+/// nodes sharing a restyle PR collapse to a single decision (ARCHITECTURE.md §9).
+void _renderClusters(StringBuffer out, TriageReport triage) {
+  final clustered = <String, List<TriageVerdict>>{};
+  for (final v in triage.verdicts) {
+    if (v.cluster != null) {
+      (clustered[v.cluster!] ??= []).add(v);
+    }
+  }
+  if (clustered.isEmpty) return;
+  out.writeln('<h2>Triage clusters</h2>');
+  clustered.forEach((cause, members) {
+    out
+      ..writeln('<section class="cluster">')
+      ..writeln('<h3>cause <code>${escapeXml(cause)}</code> — '
+          '${members.length} node(s)</h3>')
+      ..writeln('<ul>');
+    for (final v in members) {
+      out.writeln('<li><code>${escapeXml(v.nodeId)}</code> — '
+          '${v.classification.name}</li>');
+    }
+    out
+      ..writeln('</ul>')
+      ..writeln('</section>');
+  });
 }
 
 /// Renders a `visual_pending` detail, turning a trailing PR URL into a confirm
@@ -160,4 +241,10 @@ tr.pending{background:#fffbe6}
 li.failedSoft,li.failedHard,li.blocked{color:#b00020}
 section.failure{border:1px solid #f0c0c0;border-radius:8px;padding:1rem;margin:1rem 0}
 section.pending{border:1px solid #e6d68a;border-radius:8px;padding:1rem;margin:1rem 0;background:#fffbe6}
+section.cluster{border:1px solid #cfd8e6;border-radius:8px;padding:1rem;margin:1rem 0;background:#f3f6fb}
+li.triage-metric{color:#3a4a6b}
+p.verdict{border-radius:6px;padding:.5rem .7rem;margin:.6rem 0;font-size:.95rem}
+p.verdict.bug{background:#fdecea;border:1px solid #f0c0c0}
+p.verdict.intended{background:#fffbe6;border:1px solid #e6d68a}
+p.verdict.flake{background:#eef1f5;border:1px solid #cfd8e6}
 ''';

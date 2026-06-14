@@ -11,6 +11,7 @@ device_profiles:
 strategies: [smoke, regression]
 permissions: [] # e.g. android.permission.CAMERA — pre-granted by `applens run`.
 modules: {} # optional explicit file->module map for impact analysis.
+module_paths: {} # optional module->source globs, e.g. {shop: [lib/shop/**]}; scopes `applens triage` git correlation.
 ''';
 
 /// The generated `integration_test/applens_entry.dart`. It hosts the runner with
