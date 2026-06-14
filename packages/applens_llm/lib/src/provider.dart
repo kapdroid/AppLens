@@ -73,3 +73,15 @@ class LlmCapabilities {
   final bool jsonMode;
   final int maxContextTokens;
 }
+
+/// Thrown when a provider cannot produce a schema-valid result — a malformed
+/// verdict, a transport error, or a timeout. The deterministic core never sees
+/// this: AI is advisory, so a provider failure degrades triage, never a verdict.
+class LlmException implements Exception {
+  const LlmException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'LlmException: $message';
+}
