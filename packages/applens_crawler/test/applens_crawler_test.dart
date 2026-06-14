@@ -168,19 +168,22 @@ void main() {
     expect(draft(first.graph), draft(second.graph));
   });
 
-  test('the scripted model still covers the real stranger graph routes', () {
+  test('the scripted model still covers the real shop-module routes', () {
     // Guards against the in-test mirror drifting from the hand-written fixture:
-    // every non-destructive-gated route the real graph declares must be one the
-    // crawl can reach. (Loaded from the repo so a fixture edit fails loudly.)
+    // every non-destructive-gated shop route the real graph declares must be one
+    // the crawl can reach. The mirror models the shop flow specifically, so the
+    // guard scopes to the shop module (loaded from the repo so a fixture edit to
+    // the shop screens fails loudly).
     final root = _repoDirContaining('examples/stranger_app/qa_graph');
     final real = loadGraph('${root.path}/examples/stranger_app/qa_graph');
-    final realRoutes = {
+    final shopRoutes = {
       for (final n in real.nodes)
-        if (n.identity.route != null) n.identity.route!,
+        if (n.id.startsWith('shop.') && n.identity.route != null)
+          n.identity.route!,
     }..remove('/confirm'); // only reachable via the destructive btn_place_order
 
     final mirrorRoutes = _Stranger._keysByRoute.keys.toSet();
-    expect(mirrorRoutes, containsAll(realRoutes));
+    expect(mirrorRoutes, containsAll(shopRoutes));
   });
 }
 

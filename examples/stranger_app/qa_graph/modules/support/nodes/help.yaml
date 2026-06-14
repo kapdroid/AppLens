@@ -1,0 +1,13 @@
+# Help screen. Sanity-tagged so smoke covers the support module.
+includes: [shared/overlays/app_bar]
+identity:
+  route: /help
+  anchors: [lbl_help, btn_open_settings]
+payload:
+  assertions:
+    - { type: widget_exists, key: lbl_help }
+  edges:
+    - { action: tap, key: btn_open_settings, target: settings }
+    - { action: back, target: shop.dashboard }
+  tags: [support, sanity]
+  owner: team-support

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'cart_screen.dart';
 import 'catalog_screen.dart';
+import 'help_screen.dart';
+import 'login_screen.dart';
 import 'settings_screen.dart';
 
 /// Entry screen with navigation into the shopping flow.
@@ -31,6 +33,16 @@ class HomeScreen extends StatelessWidget {
               key: const Key('btn_view_cart'),
               onPressed: () => Navigator.pushNamed(context, CartScreen.route),
               child: const Text('View cart'),
+            ),
+            ElevatedButton(
+              key: const Key('btn_account'),
+              onPressed: () => Navigator.pushNamed(context, LoginScreen.route),
+              child: const Text('Account'),
+            ),
+            TextButton(
+              key: const Key('btn_help'),
+              onPressed: () => Navigator.pushNamed(context, HelpScreen.route),
+              child: const Text('Help'),
             ),
             TextButton(
               key: const Key('btn_settings'),

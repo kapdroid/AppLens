@@ -10,5 +10,8 @@ payload:
   edges:
     - { action: tap, key: btn_start_shopping, target: catalog }
     - { action: tap, key: btn_view_cart, target: cart }
+    - { action: tap, key: btn_account, target: account.login }
+    - { action: tap, key: btn_help, target: support.help }
+    - { action: tap, key: btn_settings, target: support.settings }
   tags: [sanity]
   owner: team-shop

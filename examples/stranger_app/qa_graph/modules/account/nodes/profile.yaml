@@ -1,0 +1,13 @@
+# The signed-in profile. Sanity-tagged so smoke covers the account module.
+includes: [shared/overlays/app_bar]
+identity:
+  route: /profile
+  anchors: [lbl_account_name, btn_view_orders]
+payload:
+  assertions:
+    - { type: widget_exists, key: lbl_account_name }
+  edges:
+    - { action: tap, key: btn_view_orders, target: orders }
+    - { action: tap, key: btn_logout, target: shop.dashboard }
+  tags: [account, sanity]
+  owner: team-account

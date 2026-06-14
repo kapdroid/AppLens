@@ -1,0 +1,17 @@
+# The sign-in form. The enter_text self-edges let regression exercise text entry
+# (they stay on /login); tapping sign-in advances to the profile.
+includes: [shared/overlays/app_bar]
+identity:
+  route: /login
+  anchors: [field_username, field_password, btn_login]
+payload:
+  assertions:
+    - { type: widget_exists, key: field_username }
+    - { type: widget_exists, key: btn_login }
+  edges:
+    - { action: enter_text, key: field_username, text: alex, target: login }
+    - { action: enter_text, key: field_password, text: secret, target: login }
+    - { action: tap, key: btn_login, target: profile }
+    - { action: back, target: shop.dashboard }
+  tags: [account]
+  owner: team-account

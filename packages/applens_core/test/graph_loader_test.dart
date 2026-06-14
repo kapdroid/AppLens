@@ -29,14 +29,27 @@ void main() {
     graph = loadGraph('${root.path}/$relativeGraph');
   });
 
-  test('loads all five nodes with hierarchical ids', () {
+  test('loads every node across all modules with hierarchical ids', () {
     expect(graph.nodes.map((node) => node.id).toSet(), {
       'shop.dashboard',
       'shop.catalog',
       'shop.product',
       'shop.cart',
       'shop.confirm',
+      'account.login',
+      'account.profile',
+      'account.orders',
+      'support.help',
+      'support.settings',
     });
+  });
+
+  test('a cross-module edge keeps its qualified target', () {
+    final dashboard = graph.byId['shop.dashboard']!;
+    expect(
+      dashboard.payload.edges.map((e) => e.target),
+      contains('account.login'),
+    );
   });
 
   test('entry nodes come from the module manifest, module-qualified', () {

@@ -1,0 +1,5 @@
+# Account module: sign-in, profile, and past orders. Reached cross-module from
+# the shop dashboard (no entry node of its own).
+owner: team-account
+tags: [account]
+entry_nodes: []

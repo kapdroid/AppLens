@@ -9,7 +9,7 @@ import 'package:stranger_app/cart_model.dart';
 import 'package:stranger_app/main.dart';
 
 void main() {
-  testWidgets('walks the stranger graph (smoke) and scrolls the long list', (
+  testWidgets('walks the 10-node graph (smoke) across all three modules', (
     tester,
   ) async {
     final observer = AppLensNavigatorObserver();
@@ -37,13 +37,41 @@ void main() {
               (v) => '${v.expectedNodeId}:${v.outcome.name}:${v.matchedNodeId}')
           .join(', '),
     );
+    // Smoke now reaches every module — shop, account (via the cross-module
+    // login → profile path), and support.
     expect(
       {for (final v in record.visits) v.matchedNodeId},
-      containsAll(['shop.dashboard', 'shop.catalog']),
+      containsAll([
+        'shop.dashboard',
+        'shop.catalog',
+        'account.profile',
+        'support.help',
+      ]),
     );
+  });
 
-    // The scroll-into-long-list node, against the real 60-item catalog.
+  testWidgets('the driver scrolls into the long catalog list', (tester) async {
+    await tester.pumpWidget(StrangerApp(cart: CartModel()));
+    await tester.pumpAndSettle();
+    final driver = appLensWidgetDriver(tester);
+
+    await driver.tap(const KeySelector('btn_start_shopping'));
+    await tester.pumpAndSettle();
     await driver.scrollTo(const KeySelector('product_40'));
     expect(find.byKey(const Key('product_40')), findsOneWidget);
+  });
+
+  testWidgets('the action engine enters text into the login form', (
+    tester,
+  ) async {
+    await tester.pumpWidget(StrangerApp(cart: CartModel()));
+    await tester.pumpAndSettle();
+    final driver = appLensWidgetDriver(tester);
+
+    await driver.tap(const KeySelector('btn_account'));
+    await tester.pumpAndSettle();
+    await driver.enterText(const KeySelector('field_username'), 'alex');
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextField, 'alex'), findsOneWidget);
   });
 }

@@ -4,9 +4,13 @@ import 'cart_model.dart';
 import 'models/product.dart';
 import 'screens/cart_screen.dart';
 import 'screens/catalog_screen.dart';
+import 'screens/help_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/order_confirm_screen.dart';
+import 'screens/orders_screen.dart';
 import 'screens/product_detail_screen.dart';
+import 'screens/profile_screen.dart';
 import 'screens/settings_screen.dart';
 
 void main() {
@@ -37,6 +41,10 @@ class StrangerApp extends StatelessWidget {
           CartScreen.route: (_) => const CartScreen(),
           OrderConfirmScreen.route: (_) => const OrderConfirmScreen(),
           SettingsScreen.route: (_) => const SettingsScreen(),
+          LoginScreen.route: (_) => const LoginScreen(),
+          ProfileScreen.route: (_) => const ProfileScreen(),
+          OrdersScreen.route: (_) => const OrdersScreen(),
+          HelpScreen.route: (_) => const HelpScreen(),
         },
         onGenerateRoute: (settings) {
           if (settings.name == ProductDetailScreen.route) {

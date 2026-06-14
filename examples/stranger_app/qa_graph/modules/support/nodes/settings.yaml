@@ -1,0 +1,13 @@
+# Settings, reachable from both the dashboard and help. Its back edge names the
+# dashboard as the canonical parent.
+includes: [shared/overlays/app_bar]
+identity:
+  route: /settings
+  anchors: [switch_dark_mode]
+payload:
+  assertions:
+    - { type: widget_exists, key: switch_dark_mode }
+  edges:
+    - { action: back, target: shop.dashboard }
+  tags: [support]
+  owner: team-support
