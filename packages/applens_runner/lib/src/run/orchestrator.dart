@@ -173,12 +173,14 @@ class Orchestrator {
           final proposal = await _matchedOpenProposal(node, capture);
           if (proposal != null) {
             pending = true;
+            final pr = proposal.reasonPr;
             assertions.add(
               AssertionResult(
                 tierOrder: tier3Order,
                 type: 'visual_pending',
                 passed: true,
-                detail: 'matches open proposal ${proposal.image}',
+                detail: 'matches open proposal ${proposal.image}'
+                    '${pr == null ? '' : ' $pr'}',
               ),
             );
           } else {

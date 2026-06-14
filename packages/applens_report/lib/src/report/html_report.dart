@@ -101,8 +101,50 @@ String renderRunReport(RunRecord run, Graph graph) {
     }
   }
 
+  final pendings =
+      run.visits.where((v) => v.outcome == NodeOutcome.pending).toList();
+  if (pendings.isNotEmpty) {
+    out.writeln(
+      '<h2>Pending — intended changes awaiting confirmation</h2>',
+    );
+    for (final visit in pendings) {
+      final node = graph.byId[visit.expectedNodeId];
+      final path = node?.source?.source ?? visit.expectedNodeId;
+      out
+        ..writeln('<section class="pending">')
+        ..writeln(
+          '<h3><code>${escapeXml(visit.expectedNodeId)}</code> — pending</h3>',
+        )
+        ..writeln('<ul>');
+      for (final result
+          in visit.assertions.where((a) => a.type == 'visual_pending')) {
+        out.writeln(
+          '<li><code>${escapeXml(path)}</code> — ${_confirmLine(result.detail)}'
+          '</li>',
+        );
+      }
+      out
+        ..writeln('</ul>')
+        ..writeln('</section>');
+    }
+  }
+
   out.writeln('</body></html>');
   return out.toString();
+}
+
+/// Renders a `visual_pending` detail, turning a trailing PR URL into a confirm
+/// link (the report *is* the PR approval surface — ARCHITECTURE.md §9). The URL
+/// is populated once the VCS adapter has opened the baseline PR.
+String _confirmLine(String detail) {
+  final match = RegExp(r'https?://\S+').firstMatch(detail);
+  if (match == null) {
+    return escapeXml(detail);
+  }
+  final url = match.group(0)!;
+  final text = detail.replaceFirst(url, '').trim();
+  return '${escapeXml(text)} '
+      '<a href="${escapeXml(url)}">Confirm in PR ↗</a>';
 }
 
 const String _css = '''
@@ -117,4 +159,5 @@ tr.blocked{background:#fff4e5}
 tr.pending{background:#fffbe6}
 li.failedSoft,li.failedHard,li.blocked{color:#b00020}
 section.failure{border:1px solid #f0c0c0;border-radius:8px;padding:1rem;margin:1rem 0}
+section.pending{border:1px solid #e6d68a;border-radius:8px;padding:1rem;margin:1rem 0;background:#fffbe6}
 ''';

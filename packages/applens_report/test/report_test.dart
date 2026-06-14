@@ -92,6 +92,40 @@ void main() {
     expect(html, contains('#b00020')); // failing node highlighted red
   });
 
+  test('renders a pending section with a confirm-in-PR link', () {
+    const run = RunRecord(
+      id: 'r',
+      strategy: 'smoke',
+      graphHash: 'sha256:abc',
+      seed: 0,
+      visits: [
+        NodeVisit(
+          step: 0,
+          expectedNodeId: 'shop.cart',
+          matchedNodeId: 'shop.cart',
+          outcome: NodeOutcome.pending,
+          assertions: [
+            AssertionResult(
+              tierOrder: 30,
+              type: 'visual_pending',
+              passed: true,
+              detail: 'matches open proposal sha256:bb '
+                  'https://github.com/o/r/pull/7',
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final html = renderRunReport(run, _graph);
+    expect(html, contains('Pending — intended changes'));
+    expect(html, contains('section class="pending"'));
+    expect(html, contains('href="https://github.com/o/r/pull/7"'));
+    expect(html, contains('Confirm in PR'));
+    // The cart node file locates the pending change.
+    expect(html, contains('modules/shop/nodes/cart.yaml'));
+  });
+
   test('exitCodeForRun maps outcomes to 0/1/2', () {
     RunRecord runWith(NodeOutcome outcome) => RunRecord(
           id: 'x',
