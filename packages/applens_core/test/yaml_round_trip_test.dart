@@ -58,4 +58,47 @@ void main() {
     expect(() => parseNode(broken, source: 'broken.yaml'),
         throwsA(isA<GraphParseException>()));
   });
+
+  test('a mistyped baseline state is a loud parse error, not silent coercion',
+      () {
+    const bad = 'id: x\n'
+        'identity: { route: /x }\n'
+        'payload:\n'
+        '  visual_baselines:\n'
+        '    - context: { device: d, locale: l, theme: t }\n'
+        '      capture: full_screen\n'
+        '      state: aproved\n' // typo for "approved"
+        '      image: "sha256:z"\n';
+    expect(
+      () => parseNode(bad, source: 'bad.yaml'),
+      throwsA(isA<GraphParseException>()
+          .having((e) => e.message, 'message', contains('state'))),
+    );
+  });
+
+  test('a fragment that declares its own includes is a loud parse error', () {
+    const fragment = 'includes: [shared/other]\n'
+        'identity: { anchors: [app_bar] }\n';
+    expect(
+      () => parseFragment(fragment, source: 'frag.yaml'),
+      throwsA(isA<GraphParseException>()
+          .having((e) => e.message, 'message', contains('includes'))),
+    );
+  });
+
+  test('a mistyped baseline capture is a loud parse error', () {
+    const bad = 'id: x\n'
+        'identity: { route: /x }\n'
+        'payload:\n'
+        '  visual_baselines:\n'
+        '    - context: { device: d, locale: l, theme: t }\n'
+        '      capture: cropToWidget\n' // enum-name, not the yaml spelling
+        '      state: approved\n'
+        '      image: "sha256:z"\n';
+    expect(
+      () => parseNode(bad, source: 'bad.yaml'),
+      throwsA(isA<GraphParseException>()
+          .having((e) => e.message, 'message', contains('capture'))),
+    );
+  });
 }

@@ -1,9 +1,41 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:applens_core/applens_core.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('round-trips an artifact binary payload (the diff PNG) through SQLite',
+      () async {
+    final store = SqliteRunStore.inMemory();
+    addTearDown(store.close);
+    final bytes = Uint8List.fromList([0, 255, 1, 254, 128, 7]);
+
+    await store.saveRun(
+      RunRecord(
+        id: 'r',
+        strategy: 'regression',
+        graphHash: 'h',
+        seed: 0,
+        visits: [
+          NodeVisit(
+            step: 0,
+            expectedNodeId: 'a',
+            matchedNodeId: 'a',
+            outcome: NodeOutcome.failedSoft,
+            artifacts: [
+              Artifact(kind: 'diff', description: 'red diff', bytes: bytes),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    final loaded = await store.loadRun('r');
+    final artifact = loaded!.visits.single.artifacts.single;
+    expect(artifact.bytes, bytes); // not dropped
+  });
+
   test('SqliteRunStore round-trips a run record through the schema', () async {
     final store = SqliteRunStore.inMemory();
     addTearDown(store.close);

@@ -118,10 +118,12 @@ class VisualBaseline {
   factory VisualBaseline.fromMap(Map<String, Object?> map) => VisualBaseline(
         context: BaselineContext.fromMap(
             (map['context']! as Map).cast<String, Object?>()),
+        // Throw on an unknown enum rather than silently coercing — a corrupted
+        // `state`/`capture` must not quietly downgrade a baseline.
         capture: CaptureKind.fromYaml(map['capture']! as String) ??
-            CaptureKind.fullScreen,
+            (throw FormatException('unknown capture "${map['capture']}"')),
         state: BaselineState.fromYaml(map['state']! as String) ??
-            BaselineState.proposed,
+            (throw FormatException('unknown baseline state "${map['state']}"')),
         widget: map['widget'] as String?,
         image: map['image'] as String?,
         mask: map['mask'] as String?,

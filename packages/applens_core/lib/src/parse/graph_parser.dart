@@ -68,6 +68,16 @@ NodeFragment parseFragment(String yamlText, {required String source}) {
   final map = _loadMap(yamlText, source);
   final reader = _Reader(map, source);
 
+  // A fragment's own `includes:` would be silently ignored (only nodes resolve
+  // includes), so reject it loudly rather than dropping the author's intent.
+  final includesNode = map.nodes['includes'];
+  if (includesNode != null) {
+    reader.fail(
+        'a fragment may not declare "includes" (nested includes are '
+        'not resolved); inline its contents instead',
+        includesNode);
+  }
+
   final identity = reader.mapOf('identity');
   final payload = reader.mapOf('payload');
   final identityReader = identity == null ? null : _Reader(identity, source);
@@ -231,14 +241,33 @@ VisualBaseline _parseBaseline(YamlMap map, String source) {
   final captureName =
       reader.optString('capture') ?? CaptureKind.fullScreen.yaml;
   final stateName = reader.optString('state') ?? BaselineState.proposed.name;
+  // Reject an unknown enum spelling loudly — silently coercing a typo'd
+  // `state: aproved` to `proposed` would skip the approved baseline and disable
+  // the tier-3 oracle with no error.
+  final capture = CaptureKind.fromYaml(captureName);
+  if (capture == null) {
+    reader.fail(
+      'unknown capture "$captureName" (expected: '
+      '${CaptureKind.values.map((c) => c.yaml).join(', ')})',
+      map.nodes['capture'] ?? map,
+    );
+  }
+  final state = BaselineState.fromYaml(stateName);
+  if (state == null) {
+    reader.fail(
+      'unknown baseline state "$stateName" (expected: '
+      '${BaselineState.values.map((s) => s.name).join(', ')})',
+      map.nodes['state'] ?? map,
+    );
+  }
   return VisualBaseline(
     context: BaselineContext(
       device: contextReader?.optString('device') ?? '',
       locale: contextReader?.optString('locale') ?? '',
       theme: contextReader?.optString('theme') ?? '',
     ),
-    capture: CaptureKind.fromYaml(captureName) ?? CaptureKind.fullScreen,
-    state: BaselineState.fromYaml(stateName) ?? BaselineState.proposed,
+    capture: capture,
+    state: state,
     widget: reader.optString('widget'),
     image: reader.optString('image'),
     mask: reader.optString('mask'),

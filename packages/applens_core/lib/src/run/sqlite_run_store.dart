@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:sqlite3/sqlite3.dart';
 
 import 'run_model.dart';
@@ -31,7 +33,7 @@ class SqliteRunStore implements RunStore {
         run_id TEXT, step INTEGER, tier_order INTEGER, type TEXT,
         passed INTEGER, skipped INTEGER, detail TEXT);
       CREATE TABLE IF NOT EXISTS artifacts (
-        run_id TEXT, step INTEGER, kind TEXT, description TEXT);
+        run_id TEXT, step INTEGER, kind TEXT, description TEXT, bytes BLOB);
     ''');
   }
 
@@ -76,11 +78,12 @@ class SqliteRunStore implements RunStore {
         ]);
       }
       for (final artifact in visit.artifacts) {
-        _db.execute('INSERT INTO artifacts VALUES (?, ?, ?, ?)', [
+        _db.execute('INSERT INTO artifacts VALUES (?, ?, ?, ?, ?)', [
           run.id,
           visit.step,
           artifact.kind,
           artifact.description,
+          artifact.bytes, // BLOB — the diff/capture PNG; null when absent
         ]);
       }
     }
@@ -110,7 +113,7 @@ class SqliteRunStore implements RunStore {
             type: row['type'] as String,
             passed: (row['passed'] as int) == 1,
             skipped: (row['skipped'] as int) == 1,
-            detail: row['detail'] as String,
+            detail: row['detail'] as String? ?? '',
           ),
       ];
       final artifacts = [
@@ -120,7 +123,8 @@ class SqliteRunStore implements RunStore {
         ))
           Artifact(
             kind: row['kind'] as String,
-            description: row['description'] as String,
+            description: row['description'] as String? ?? '',
+            bytes: row['bytes'] as Uint8List?,
           ),
       ];
       visits.add(

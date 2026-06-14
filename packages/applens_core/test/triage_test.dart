@@ -65,6 +65,27 @@ void main() {
     });
   });
 
+  group('VisualBaseline.fromMap', () {
+    test('throws on an unknown state/capture rather than coercing', () {
+      expect(
+        () => VisualBaseline.fromMap(const {
+          'context': {'device': 'd', 'locale': 'l', 'theme': 't'},
+          'capture': 'full_screen',
+          'state': 'aproved', // typo
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => VisualBaseline.fromMap(const {
+          'context': {'device': 'd', 'locale': 'l', 'theme': 't'},
+          'capture': 'bogus',
+          'state': 'approved',
+        }),
+        throwsFormatException,
+      );
+    });
+  });
+
   group('TriageReport', () {
     test('round-trips verdicts + proposals and computes overturn rate', () {
       const report = TriageReport(
