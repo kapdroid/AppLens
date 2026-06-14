@@ -214,17 +214,25 @@ const Set<String> _wordBoundaryOnly = {'pay', 'buy', 'order', 'send', 'wipe'};
 
 /// Whether [key] names a destructive action. A keyword matches if it is a whole
 /// word token of the key (handles `submitForm` / `submit_form` / `btn2pay`),
-/// and — for the long, unambiguous keywords only — if it appears anywhere in the
-/// glued key (so all-lowercase `submitform` / `deleteall` / `confirmpay` are
-/// caught too). The short or substring-risky keywords in [_wordBoundaryOnly]
-/// stay token-only, so `buyer` / `reorder` / `border` / `swipe` stay tappable. A
-/// fully-glued key ending in a short keyword (e.g. `placeorder`) is the residual
-/// blind spot the human draft review backstops.
+/// and — only when the key is a single glued token with no word boundary to
+/// split on (`submitform` / `deleteall` / `confirmpay`) — if a long, unambiguous
+/// keyword appears anywhere in it. The substring pass is gated on the
+/// single-token case so a well-formed multi-word key whose tokens merely *derive*
+/// from a keyword (`confirmationNumber` → `confirmation`, `submittedAt` →
+/// `submitted`) is judged by its tokens alone and stays tappable. The short or
+/// substring-risky keywords in [_wordBoundaryOnly] never substring-match, so
+/// `buyer` / `reorder` / `border` / `swipe` stay tappable. A fully-glued key
+/// ending in a short keyword (`placeorder`) or a single-word derivative used
+/// alone as a key (`eraser`) is the residual blind spot the draft review backstops.
 bool _isDestructive(String key, Set<String> keywords) {
-  if (_tokens(key).any(keywords.contains)) {
+  final tokens = _tokens(key);
+  if (tokens.any(keywords.contains)) {
     return true;
   }
-  final glued = key.toLowerCase();
+  if (tokens.length != 1) {
+    return false; // multi-token keys are judged by their tokens, never substrings
+  }
+  final glued = tokens.first;
   return keywords
       .where((keyword) => !_wordBoundaryOnly.contains(keyword))
       .any(glued.contains);

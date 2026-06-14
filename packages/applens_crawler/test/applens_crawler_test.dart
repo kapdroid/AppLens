@@ -244,6 +244,28 @@ void main() {
     });
   });
 
+  test('hybrid: multi-token keyword derivatives are not false-positives', () {
+    // Well-formed camelCase keys whose tokens merely derive from a keyword
+    // (confirmationNumber → confirmation, submittedAt → submitted) tokenize into
+    // multiple words, so the substring pass must NOT fire — they stay crawlable.
+    final session = _ScriptSession(_ScriptApp(
+      initial: 's0',
+      routeOf: {'s0': '/home'},
+      keysOf: {
+        's0': [
+          'confirmationNumber',
+          'submittedAt',
+          'deletedItemsBadge',
+          'cancelledOrdersTab',
+        ],
+      },
+      transitions: const {},
+    ));
+    return crawl(session).then((result) {
+      expect(result.skippedDestructive, isEmpty);
+    });
+  });
+
   test('distinct states never collapse onto one node id', () {
     // Three states; the third shares route /x with the first but has a
     // different tree, and its generated id would collide with the second's
