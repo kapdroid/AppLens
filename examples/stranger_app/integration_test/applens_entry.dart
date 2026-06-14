@@ -72,7 +72,14 @@ void main() {
     );
 
     // Scroll into the long catalog list against the real app (the gate's
-    // scroll-into-long-list node).
+    // scroll-into-long-list node). Reach the catalog from a fresh launch first —
+    // the multi-path walk leaves the app on its last path's screen, not the
+    // catalog (mirrors the headless scroll test).
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(StrangerApp(cart: CartModel()));
+    await tester.pumpAndSettle();
+    await driver.tap(const KeySelector('btn_start_shopping'));
+    await driver.settle(const SettlePolicy());
     await driver.scrollTo(const KeySelector('product_40'));
     expect(find.byKey(const Key('product_40')), findsOneWidget);
   });

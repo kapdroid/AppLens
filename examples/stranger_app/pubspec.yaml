@@ -32,3 +32,7 @@ flutter:
     - qa_graph/shared/overlays/app_bar.yaml
     - qa_graph/modules/shop/shop.module.yaml
     - qa_graph/modules/shop/nodes/
+    - qa_graph/modules/account/account.module.yaml
+    - qa_graph/modules/account/nodes/
+    - qa_graph/modules/support/support.module.yaml
+    - qa_graph/modules/support/nodes/
