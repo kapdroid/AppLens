@@ -34,5 +34,6 @@ export 'src/run/sqlite_run_store.dart';
 // Shared.
 export 'src/util/source_location.dart';
 
-// Version-control port (Session 0 contract).
+// Version-control port (Session 0 contract) + the canonical baseline guard.
+export 'src/vcs/baseline_guard.dart';
 export 'src/vcs/vcs_adapter.dart';
