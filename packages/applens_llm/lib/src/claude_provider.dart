@@ -138,6 +138,7 @@ class ClaudeProvider implements LlmProvider {
     if (texts.isEmpty) {
       throw const LlmException('Claude response had no text');
     }
+    String? lastSchemaError;
     for (final text in texts) {
       final Object? parsed;
       try {
@@ -146,15 +147,20 @@ class ClaudeProvider implements LlmProvider {
         continue; // a prose preamble block; try the next
       }
       if (parsed is! Map) {
-        continue;
+        continue; // a JSON array/scalar block; try the next
       }
       final json = parsed.cast<String, Object?>();
       final errors = validateAgainstSchema(json, schema);
       if (errors.isNotEmpty) {
-        throw LlmException('Claude output failed schema: ${errors.join('; ')}');
+        // A JSON object that isn't the verdict (e.g. a scratchpad block before
+        // the real one). Remember the error, try the next block.
+        lastSchemaError = errors.join('; ');
+        continue;
       }
       return json;
     }
-    throw const LlmException('Claude output had no valid JSON text block');
+    throw LlmException(lastSchemaError == null
+        ? 'Claude output had no valid JSON text block'
+        : 'Claude output failed schema: $lastSchemaError');
   }
 }

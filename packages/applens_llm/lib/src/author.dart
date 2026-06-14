@@ -22,13 +22,31 @@ const authorNodeSchema = <String, Object?>{
             'type': 'array',
             'items': {'type': 'string'},
           },
+          // The item schemas must constrain the fields _graphFromDraft reads as
+          // typed — otherwise a schema-passing-but-typewrong assertion/edge
+          // crashes the build with a TypeError instead of degrading to an
+          // (advisory) LlmException.
           'assertions': {
             'type': 'array',
-            'items': {'type': 'object'},
+            'items': {
+              'type': 'object',
+              'required': ['type'],
+              'properties': {
+                'type': {'type': 'string'},
+              },
+            },
           },
           'edges': {
             'type': 'array',
-            'items': {'type': 'object'},
+            'items': {
+              'type': 'object',
+              'properties': {
+                'action': {'type': 'string'},
+                'target': {'type': 'string'},
+                'key': {'type': 'string'},
+                'text': {'type': 'string'},
+              },
+            },
           },
         },
       },

@@ -102,4 +102,38 @@ void main() {
     final provider = FakeLlmProvider(const LlmResult(json: {'wrong': 'shape'}));
     expect(author('anything', provider), throwsA(isA<LlmException>()));
   });
+
+  test(
+      're-validates: a non-string edge field throws LlmException, not TypeError',
+      () async {
+    // A schema-passing-shaped node whose edge target is the wrong type would
+    // crash _graphFromDraft's `as String?` reads; the deepened item schema
+    // catches it so it degrades to an (advisory) LlmException.
+    final provider = FakeLlmProvider(const LlmResult(json: {
+      'nodes': [
+        {
+          'id': 'home',
+          'edges': [
+            {'action': 'tap', 'target': 5},
+          ],
+        },
+      ],
+    }));
+    expect(author('anything', provider), throwsA(isA<LlmException>()));
+  });
+
+  test('re-validates: an assertion missing its type throws LlmException',
+      () async {
+    final provider = FakeLlmProvider(const LlmResult(json: {
+      'nodes': [
+        {
+          'id': 'home',
+          'assertions': [
+            {'key': 'btn_x'}, // no `type`
+          ],
+        },
+      ],
+    }));
+    expect(author('anything', provider), throwsA(isA<LlmException>()));
+  });
 }
