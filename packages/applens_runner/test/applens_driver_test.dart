@@ -346,4 +346,37 @@ void main() {
         reason: 'crop center should be the blue box, not the background');
     expect(center.b, greaterThan(120));
   });
+
+  testWidgets('capture(WidgetScope) on an off-screen anchor does not throw',
+      (tester) async {
+    await tester.pumpWidget(
+      _harness(
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: 10000, // far beyond the right edge of the surface
+              top: 0,
+              child: SizedBox(
+                key: const Key('offscreen'),
+                width: 40,
+                height: 30,
+                child: const ColoredBox(color: Color(0xFF2244AA)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    final driver = AppLensWidgetDriver(tester);
+
+    // An anchor at/past the screen edge used to make the width/height clamp see
+    // an upper bound below its lower bound — clamp(1, <=0) throws ArgumentError.
+    final cropped = (await tester.runAsync(
+        () => driver.capture(const WidgetScope(KeySelector('offscreen')))))!;
+
+    expect(cropped.width, greaterThanOrEqualTo(1));
+    expect(cropped.height, greaterThanOrEqualTo(1));
+    expect(cropped.pngBytes, isNotEmpty);
+  });
 }

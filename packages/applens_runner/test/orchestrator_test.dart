@@ -69,6 +69,14 @@ class _ThrowingTapDriver extends FakeDriver {
       throw const DriverException('no widget matches');
 }
 
+/// A driver whose tier-3 capture throws, modelling an overlay anchor that is
+/// absent or duplicated at capture time.
+class _ThrowingCaptureDriver extends FakeDriver {
+  @override
+  Future<Capture> capture(CaptureScope scope) async =>
+      throw const DriverException('anchor not found at capture time');
+}
+
 Node _node(String id, String route, {List<Assertion> assertions = const []}) =>
     Node(
       id: id,
@@ -474,6 +482,21 @@ void main() {
       // Recorded, visible — and the node is not failed (you can't fail a
       // comparison you couldn't run).
       expect(record.visits[1].outcome, NodeOutcome.passed);
+    });
+
+    test('a tier-3 capture failure is contained — skipped, run not crashed',
+        () async {
+      final record = await orch(
+        _ThrowingCaptureDriver(),
+        _FakeBaselines(_png(8, 8, 1, 2, 3)),
+        [_fpA, _fpBpass],
+      ).run(graphWithVisualB(), toB);
+
+      // The run completed (no thrown DriverException). Tier-3 is recorded
+      // skipped, and the node's verdict rests on tier-1/2, which passed.
+      expect(record.visits[1].outcome, NodeOutcome.passed);
+      expect(tier3(record.visits[1]).skipped, isTrue);
+      expect(tier3(record.visits[1]).detail, contains('capture skipped'));
     });
 
     test('tier 3 compares a node once per run, even when it is revisited',

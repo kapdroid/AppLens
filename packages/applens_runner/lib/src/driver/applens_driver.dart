@@ -172,8 +172,11 @@ class AppLensWidgetDriver implements AppLensDriver {
     // The capture is at physical resolution; getRect is logical. Scale the crop
     // by devicePixelRatio so it lands on the widget's pixels at any DPR.
     final dpr = tester.view.devicePixelRatio;
-    final left = (rect.left * dpr).round().clamp(0, decoded.width);
-    final top = (rect.top * dpr).round().clamp(0, decoded.height);
+    // Clamp the origin to leave at least one pixel of width/height available, so
+    // an anchor at or past the screen edge can't make the width/height clamp see
+    // an upper bound below its lower bound (clamp throws when lower > upper).
+    final left = (rect.left * dpr).round().clamp(0, decoded.width - 1);
+    final top = (rect.top * dpr).round().clamp(0, decoded.height - 1);
     final width = (rect.width * dpr).round().clamp(1, decoded.width - left);
     final height = (rect.height * dpr).round().clamp(1, decoded.height - top);
     final cropped = img.copyCrop(

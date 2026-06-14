@@ -188,53 +188,67 @@ class Orchestrator {
       final baseline = _approvedBaselineFor(node);
       if (baseline != null) {
         _tier3Evaluated.add(expected);
-        final capture = await driver.capture(deriveCaptureScope(node));
-        final result = evaluateTier3(
-          actual: capture,
-          baselinePng: await baselines!.load(baseline),
-          comparator: _comparatorFor(baseline),
-        );
-        if (result.assertion.passed || result.assertion.skipped) {
-          assertions.add(result.assertion);
-        } else {
-          // Drift from the approved baseline. Matching an open proposal is
-          // pending (yellow), not a regression (ARCHITECTURE.md §9).
-          final proposal = await _matchedOpenProposal(node, capture);
-          if (proposal != null) {
-            pending = true;
-            final pr = proposal.reasonPr;
-            assertions.add(
-              AssertionResult(
-                tierOrder: tier3Order,
-                type: 'visual_pending',
-                passed: true,
-                detail: 'matches open proposal ${proposal.image}'
-                    '${pr == null ? '' : ' $pr'}',
-              ),
-            );
-          } else {
+        try {
+          final capture = await driver.capture(deriveCaptureScope(node));
+          final result = evaluateTier3(
+            actual: capture,
+            baselinePng: await baselines!.load(baseline),
+            comparator: _comparatorFor(baseline),
+          );
+          if (result.assertion.passed || result.assertion.skipped) {
             assertions.add(result.assertion);
-            if (result.diffPng != null) {
+          } else {
+            // Drift from the approved baseline. Matching an open proposal is
+            // pending (yellow), not a regression (ARCHITECTURE.md §9).
+            final proposal = await _matchedOpenProposal(node, capture);
+            if (proposal != null) {
+              pending = true;
+              final pr = proposal.reasonPr;
+              assertions.add(
+                AssertionResult(
+                  tierOrder: tier3Order,
+                  type: 'visual_pending',
+                  passed: true,
+                  detail: 'matches open proposal ${proposal.image}'
+                      '${pr == null ? '' : ' $pr'}',
+                ),
+              );
+            } else {
+              assertions.add(result.assertion);
+              if (result.diffPng != null) {
+                extraArtifacts.add(
+                  Artifact(
+                    kind: 'diff',
+                    description:
+                        'tier-3 ${node.id}: ${result.assertion.detail}',
+                    bytes: result.diffPng,
+                  ),
+                );
+              }
+              // Record the drifted capture itself, content-addressed, so triage
+              // can propose it as the candidate golden if it judges the change
+              // intended (ARCHITECTURE.md §9). The diff overlay is evidence; this
+              // is the would-be baseline.
               extraArtifacts.add(
                 Artifact(
-                  kind: 'diff',
-                  description: 'tier-3 ${node.id}: ${result.assertion.detail}',
-                  bytes: result.diffPng,
+                  kind: 'capture',
+                  description: baselineImageKey(capture.pngBytes),
+                  bytes: capture.pngBytes,
                 ),
               );
             }
-            // Record the drifted capture itself, content-addressed, so triage
-            // can propose it as the candidate golden if it judges the change
-            // intended (ARCHITECTURE.md §9). The diff overlay is evidence; this
-            // is the would-be baseline.
-            extraArtifacts.add(
-              Artifact(
-                kind: 'capture',
-                description: baselineImageKey(capture.pngBytes),
-                bytes: capture.pngBytes,
-              ),
-            );
           }
+        } on DriverException catch (error) {
+          // Tier-3 evidence collection is advisory: a capture failure (e.g. an
+          // overlay's anchor absent or duplicated at capture time) must never
+          // abort the run. Skip it so the node's verdict rests on tier-1/2.
+          assertions.add(AssertionResult(
+            tierOrder: tier3Order,
+            type: 'visual_match',
+            passed: true,
+            skipped: true,
+            detail: 'tier-3 capture skipped: ${error.message}',
+          ));
         }
       }
     }
