@@ -241,11 +241,40 @@ void main() {
     expect(nodeIdsInModules(graph, {'nonexistent'}), isEmpty);
   });
 
-  test('soak is still an unimplemented stub', () {
-    expect(
-      () => compilePlan(graph, strategy: PlanStrategy.soak),
-      throwsUnimplementedError,
-    );
+  group('soak', () {
+    test('is a seeded random walk from an entry, of the step budget', () {
+      final plan =
+          compilePlan(graph, strategy: PlanStrategy.soak, soakSteps: 12);
+      expect(plan.paths, hasLength(1));
+      final path = plan.paths.single;
+      expect(graph.entryNodeIds, contains(path.start));
+      expect(path.steps, hasLength(12));
+      // Every step follows a real edge from the previous node to its target.
+      var current = path.start;
+      for (final step in path.steps) {
+        final edges = graph.byId[current]!.payload.edges;
+        expect(edges.any((e) => e.action == step.action && e.target == step.to),
+            isTrue,
+            reason: 'step $current → ${step.to} must be a declared edge');
+        current = step.to;
+      }
+    });
+
+    test('is reproducible: same seed → byte-identical plan', () {
+      final a = compilePlan(graph, strategy: PlanStrategy.soak, seed: 7);
+      final b = compilePlan(graph, strategy: PlanStrategy.soak, seed: 7);
+      expect(writeYaml(a.toMap()), writeYaml(b.toMap()));
+    });
+
+    test('explores: visits more than one distinct edge before repeating', () {
+      // Least-visited bias means a node with N edges fans out across them
+      // before any is taken twice — not a single hot loop.
+      final plan = compilePlan(graph,
+          strategy: PlanStrategy.soak, soakSteps: 30, seed: 1);
+      final distinctTargets =
+          {for (final s in plan.paths.single.steps) s.to}.length;
+      expect(distinctTargets, greaterThan(1));
+    });
   });
 
   test('a compiled plan serializes to valid, structured YAML', () {

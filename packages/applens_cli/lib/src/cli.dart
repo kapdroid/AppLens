@@ -224,17 +224,8 @@ class _PlanCommand extends _Base {
       ...nodeIdsInModules(
           graph, argResults!.multiOption('changed-module').toSet()),
     };
-    final Plan plan;
-    try {
-      plan = compilePlan(graph,
-          strategy: strategy, changedNodeIds: changedNodeIds);
-    } on UnimplementedError catch (error) {
-      // A valid-but-unimplemented strategy (soak) parses fine, so it slips past
-      // the unknown-strategy guard above; fail cleanly instead of a stack trace.
-      out.writeln('strategy "${argResults!.option('strategy')}" '
-          'is not implemented yet: ${error.message}');
-      return 64;
-    }
+    final plan =
+        compilePlan(graph, strategy: strategy, changedNodeIds: changedNodeIds);
     final yaml = writeYaml(plan.toMap());
     final outPath = argResults!.option('out');
     if (outPath == null) {
@@ -449,6 +440,9 @@ class _RunCommand extends _Base {
   _RunCommand(super.out) {
     argParser
       ..addOption('strategy', defaultsTo: 'smoke')
+      ..addOption('seed', defaultsTo: '0', help: 'Seed for the soak walk.')
+      ..addOption('soak-steps',
+          defaultsTo: '40', help: 'Step budget for the soak walk.')
       ..addOption('entrypoint',
           defaultsTo: 'integration_test/applens_entry.dart')
       ..addOption('device',
@@ -499,6 +493,11 @@ class _RunCommand extends _Base {
       'drive',
       '--driver=test_driver/integration_test.dart',
       '--target=$entrypoint',
+      // The entrypoint reads these to compile the plan on-device, so the same
+      // host runs smoke/regression/impact or a seeded soak.
+      '--dart-define=APPLENS_STRATEGY=${argResults!.option('strategy')}',
+      '--dart-define=APPLENS_SEED=${argResults!.option('seed')}',
+      '--dart-define=APPLENS_SOAK_STEPS=${argResults!.option('soak-steps')}',
       if (device != null) ...['-d', device],
     ];
     out.writeln('flutter ${flutterArgs.join(' ')}');

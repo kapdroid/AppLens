@@ -1,8 +1,12 @@
 import 'dart:collection';
+import 'dart:math';
 
 import '../model/edge.dart';
 import '../model/graph.dart';
 import 'plan.dart';
+
+/// Default step budget for a soak walk.
+const int defaultSoakSteps = 40;
 
 /// The default tag whose nodes the smoke strategy must cover.
 const String defaultSmokeTag = 'sanity';
@@ -21,8 +25,9 @@ Set<String> nodeIdsInModules(Graph graph, Set<String> modules) => {
 /// strategy, and seed always produce a byte-identical plan. The `impact`
 /// strategy targets [changedNodeIds] — the nodes a PR's diff touched (the CLI
 /// resolves git-diff → modules → nodes) — and covers each affected node and every
-/// edge into it, so a PR runs only the affected screens. `soak` (seeded random
-/// walks) is not implemented yet.
+/// edge into it, so a PR runs only the affected screens. `soak` is a seeded
+/// random long walk weighted toward least-visited edges ([soakSteps] long) —
+/// reproducible because the seed fixes every choice.
 Plan compilePlan(
   Graph graph, {
   required PlanStrategy strategy,
@@ -30,6 +35,7 @@ Plan compilePlan(
   int alternates = 2,
   String smokeTag = defaultSmokeTag,
   Set<String> changedNodeIds = const {},
+  int soakSteps = defaultSoakSteps,
 }) {
   final entries = (graph.entryNodeIds.toSet().toList())..sort();
   final nodeIds = graph.byId.keys.toList()..sort();
@@ -38,10 +44,7 @@ Plan compilePlan(
     PlanStrategy.smoke => _smoke(graph, entries, nodeIds, smokeTag),
     PlanStrategy.regression => _regression(graph, entries, nodeIds),
     PlanStrategy.impact => _impact(graph, entries, nodeIds, changedNodeIds),
-    PlanStrategy.soak => throw UnimplementedError(
-        'soak strategy is not implemented yet — see ARCHITECTURE.md §6 '
-        '(seeded random walks).',
-      ),
+    PlanStrategy.soak => _soak(graph, entries, seed, soakSteps),
   };
 
   // Alternates are reroute options for the nodes the plan will visit; an impact
@@ -80,6 +83,52 @@ List<PlanPath> _smoke(
     }
   }
   return paths;
+}
+
+/// A single seeded random long walk (ARCHITECTURE.md §6): from the first entry,
+/// repeatedly step along an outgoing edge for up to [steps], biased toward the
+/// least-visited edges so the walk explores rather than looping a hot path.
+/// Among the candidates with the lowest visit count one is picked with [seed]'s
+/// PRNG, so the same graph + seed + step budget yields a byte-identical plan —
+/// reproducible by construction. Stops early at a dead end (no outgoing edges).
+List<PlanPath> _soak(Graph graph, List<String> entries, int seed, int steps) {
+  if (entries.isEmpty) {
+    return const [];
+  }
+  final rng = Random(seed);
+  final visits = <String>[]; // "from#edgeIndex" appended once per traversal
+  int count(String key) => visits.where((v) => v == key).length;
+
+  final start = entries.first;
+  final stepList = <PlanStep>[];
+  var current = start;
+  for (var i = 0; i < steps; i++) {
+    final edges = graph.byId[current]!.payload.edges;
+    if (edges.isEmpty) {
+      break; // dead end — a node with nothing to do
+    }
+    // Indices of the edges with the lowest visit count, in edge order.
+    final keys = [for (var e = 0; e < edges.length; e++) '$current#$e'];
+    final counts = keys.map(count).toList();
+    final min = counts.reduce((a, b) => a < b ? a : b);
+    final leastVisited = [
+      for (var e = 0; e < edges.length; e++)
+        if (counts[e] == min) e,
+    ];
+    final chosen = leastVisited[rng.nextInt(leastVisited.length)];
+    final edge = edges[chosen];
+    visits.add(keys[chosen]);
+    stepList.add(PlanStep(
+      action: edge.action,
+      to: edge.target,
+      key: edge.key,
+      text: edge.text,
+      uri: edge.uri,
+      direction: edge.direction,
+    ));
+    current = edge.target;
+  }
+  return [PlanPath(start: start, steps: stepList)];
 }
 
 /// Paths covering each node a PR touched ([changedNodeIds]) *and every edge into

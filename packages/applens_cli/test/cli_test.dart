@@ -61,11 +61,10 @@ void main() {
     expect(output, isNot(contains('shop.confirm'))); // unaffected screen absent
   });
 
-  test('plan --strategy soak fails cleanly (unimplemented), not with a crash',
-      () async {
+  test('plan --strategy soak compiles a seeded walk', () async {
     final (code, output) = await _run(['plan', _qaGraph, '--strategy', 'soak']);
-    expect(code, 64);
-    expect(output, contains('not implemented'));
+    expect(code, 0);
+    expect(output, contains('strategy: "soak"'));
   });
 
   test('graph stats reports counts and the module', () async {

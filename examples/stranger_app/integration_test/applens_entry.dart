@@ -58,7 +58,23 @@ void main() {
       reason: 'the graph must validate before a run',
     );
 
-    final plan = compilePlan(graph, strategy: PlanStrategy.smoke);
+    // Strategy/seed/soak budget come from `applens run` as dart-defines, so the
+    // same host runs smoke, regression, impact, or a seeded soak on the device.
+    const strategyName =
+        String.fromEnvironment('APPLENS_STRATEGY', defaultValue: 'smoke');
+    const seed = int.fromEnvironment('APPLENS_SEED');
+    const soakSteps =
+        int.fromEnvironment('APPLENS_SOAK_STEPS', defaultValue: 40);
+    // seed/soakSteps arrive as dart-defines at build time; the analyzer can't
+    // see the override and flags them as matching defaults, hence the ignores.
+    final plan = compilePlan(
+      graph,
+      strategy: PlanStrategy.fromYaml(strategyName) ?? PlanStrategy.smoke,
+      // ignore: avoid_redundant_argument_values
+      seed: seed,
+      // ignore: avoid_redundant_argument_values
+      soakSteps: soakSteps,
+    );
     final orchestrator = Orchestrator(
       driver: driver,
       fingerprints: WidgetFingerprintSource(driver, observer),
