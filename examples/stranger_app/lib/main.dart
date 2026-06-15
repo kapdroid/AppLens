@@ -50,6 +50,7 @@ class StrangerApp extends StatelessWidget {
           if (settings.name == ProductDetailScreen.route) {
             final product = settings.arguments! as Product;
             return MaterialPageRoute<void>(
+              settings: settings, // keep the route named so observers see it
               builder: (_) => ProductDetailScreen(product: product),
             );
           }

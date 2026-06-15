@@ -77,7 +77,16 @@ void main() {
     );
     final orchestrator = Orchestrator(
       driver: driver,
-      fingerprints: WidgetFingerprintSource(driver, observer),
+      // Tier-0 flag inference: count the `cart_item_` rows in the live tree to
+      // tell the empty cart (cart_count == 0) from the filled one (> 0) — no app
+      // integration, so the stranger-app rule holds.
+      fingerprints: WidgetFingerprintSource(
+        driver,
+        observer,
+        flags: const UiInferenceFlagSource(
+          [CountProbe('cart_count', 'cart_item_')],
+        ),
+      ),
       store: InMemoryRunStore(),
       // Tier 3: compare tagged nodes against the bundled goldens. captureContext
       // is null so any approved baseline matches (single-profile v1).

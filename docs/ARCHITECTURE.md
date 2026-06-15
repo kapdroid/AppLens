@@ -135,7 +135,7 @@ identity:
 payload:
   assertions:
     - { type: widget_exists, key: btn_place_order }            # tier 1
-    - { type: text_equals, key: lbl_total, source: computed }  # tier 1
+    - { type: text_equals, key: lbl_heading, value: "Cart" }   # tier 1 (literal)
     - { type: layout_hash, baseline: hashes/order_filled }     # tier 2
   visual_baselines:                                            # tier 3, tagged nodes only
     - context: { device: pixel6, locale: en, theme: light }

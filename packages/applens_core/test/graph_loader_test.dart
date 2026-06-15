@@ -35,6 +35,7 @@ void main() {
       'shop.catalog',
       'shop.product',
       'shop.cart',
+      'shop.cart_empty',
       'shop.confirm',
       'account.login',
       'account.profile',

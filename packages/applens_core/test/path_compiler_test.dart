@@ -104,31 +104,36 @@ void main() {
   test('a multi-inbound node has distinct alternate inbound paths', () {
     final plan =
         compilePlan(graph, strategy: PlanStrategy.smoke, alternates: 3);
-    final cart = plan.alternateInboundPaths['shop.cart'];
-    expect(cart, isNotNull);
-    expect(cart!.length, greaterThanOrEqualTo(2));
-    for (final path in cart) {
+    // The catalog is reached several ways — directly from the dashboard, and
+    // by backing out of a product or the cart — so it has distinct alternates.
+    final catalog = plan.alternateInboundPaths['shop.catalog'];
+    expect(catalog, isNotNull);
+    expect(catalog!.length, greaterThanOrEqualTo(2));
+    for (final path in catalog) {
       expect(graph.entryNodeIds, contains(path.start));
-      expect(path.visited.last, 'shop.cart');
+      expect(path.visited.last, 'shop.catalog');
     }
-    final routes = cart.map((path) => path.visited.join('>')).toSet();
-    expect(routes.length, cart.length, reason: 'alternates should be distinct');
+    final routes = catalog.map((path) => path.visited.join('>')).toSet();
+    expect(routes.length, catalog.length,
+        reason: 'alternates should be distinct');
   });
 
   test('impact covers the changed screen and every edge into it', () {
+    // The cart screen has two state nodes (empty / filled) on the same route;
+    // a change to it touches both. Reached two distinct ways: "view cart" from
+    // the dashboard lands on the empty cart, "add to cart" from a product on
+    // the filled one — both must be exercised (§6 "every edge into them").
     final plan = compilePlan(
       graph,
       strategy: PlanStrategy.impact,
-      changedNodeIds: {'shop.cart'},
+      changedNodeIds: {'shop.cart', 'shop.cart_empty'},
     );
-    // Every path targets the affected screen — nothing beyond it.
+    // Every path targets an affected screen — nothing beyond it.
     expect(plan.paths, isNotEmpty);
     for (final path in plan.paths) {
-      expect(path.visited.last, 'shop.cart');
+      expect(path.visited.last, isIn(['shop.cart', 'shop.cart_empty']));
       expect(path.start, isIn(graph.entryNodeIds));
     }
-    // The two ways into the cart (from the dashboard and from a product) are
-    // both exercised — §6 "every edge into them".
     final inboundKeys = {
       for (final path in plan.paths)
         if (path.steps.isNotEmpty) path.steps.last.key,
@@ -242,22 +247,28 @@ void main() {
   });
 
   group('soak', () {
-    test('is a seeded random walk from an entry, of the step budget', () {
+    test('splits the budget into entry-rooted segments (resilience)', () {
+      // 20 steps / 8-per-segment = 3 segments, each its own path from an entry —
+      // so a failure in one segment can't block the others when walked.
       final plan =
-          compilePlan(graph, strategy: PlanStrategy.soak, soakSteps: 12);
-      expect(plan.paths, hasLength(1));
-      final path = plan.paths.single;
-      expect(graph.entryNodeIds, contains(path.start));
-      expect(path.steps, hasLength(12));
-      // Every step follows a real edge from the previous node to its target.
-      var current = path.start;
-      for (final step in path.steps) {
-        final edges = graph.byId[current]!.payload.edges;
-        expect(edges.any((e) => e.action == step.action && e.target == step.to),
-            isTrue,
-            reason: 'step $current → ${step.to} must be a declared edge');
-        current = step.to;
+          compilePlan(graph, strategy: PlanStrategy.soak, soakSteps: 20);
+      expect(plan.paths, hasLength(3));
+      var total = 0;
+      for (final path in plan.paths) {
+        expect(graph.entryNodeIds, contains(path.start));
+        total += path.steps.length;
+        // Every step follows a real edge from the previous node to its target.
+        var current = path.start;
+        for (final step in path.steps) {
+          final edges = graph.byId[current]!.payload.edges;
+          expect(
+              edges.any((e) => e.action == step.action && e.target == step.to),
+              isTrue,
+              reason: 'step $current → ${step.to} must be a declared edge');
+          current = step.to;
+        }
       }
+      expect(total, 20, reason: 'segments cover the full budget');
     });
 
     test('is reproducible: same seed → byte-identical plan', () {
@@ -266,13 +277,16 @@ void main() {
       expect(writeYaml(a.toMap()), writeYaml(b.toMap()));
     });
 
-    test('explores: visits more than one distinct edge before repeating', () {
-      // Least-visited bias means a node with N edges fans out across them
-      // before any is taken twice — not a single hot loop.
+    test('explores: visits more than one distinct edge, sharing visit counts',
+        () {
+      // Least-visited bias (shared across segments) fans out across edges
+      // rather than looping a single hot path.
       final plan = compilePlan(graph,
           strategy: PlanStrategy.soak, soakSteps: 30, seed: 1);
-      final distinctTargets =
-          {for (final s in plan.paths.single.steps) s.to}.length;
+      final distinctTargets = {
+        for (final path in plan.paths)
+          for (final s in path.steps) s.to
+      }.length;
       expect(distinctTargets, greaterThan(1));
     });
   });

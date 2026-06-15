@@ -26,8 +26,9 @@ void main() {
       reason: 'bundled assets are incomplete — add the missing module to '
           'pubspec.yaml assets',
     );
-    // All three modules (shop + account + support) are bundled.
-    expect(graph.nodes, hasLength(10));
+    // All three modules (shop + account + support) are bundled — including
+    // both /cart states (empty + filled), the eleventh node.
+    expect(graph.nodes, hasLength(11));
     expect(
       {for (final n in graph.nodes) n.id.split('.').first},
       containsAll(<String>['shop', 'account', 'support']),

@@ -85,12 +85,22 @@ List<PlanPath> _smoke(
   return paths;
 }
 
-/// A single seeded random long walk (ARCHITECTURE.md §6): from the first entry,
-/// repeatedly step along an outgoing edge for up to [steps], biased toward the
-/// least-visited edges so the walk explores rather than looping a hot path.
-/// Among the candidates with the lowest visit count one is picked with [seed]'s
-/// PRNG, so the same graph + seed + step budget yields a byte-identical plan —
-/// reproducible by construction. Stops early at a dead end (no outgoing edges).
+/// The number of steps per soak segment. A soak walk is cut into segments, each
+/// a fresh walk from the entry, so a hard failure mid-walk costs only the rest
+/// of one short segment — the runner re-anchors to the entry between paths and
+/// keeps exploring, rather than the whole long walk going `blocked`.
+const int defaultSoakSegment = 8;
+
+/// A seeded random soak (ARCHITECTURE.md §6): from the first entry, step along
+/// the least-visited outgoing edge — biased so the walk explores rather than
+/// looping a hot path — for a [steps] budget, split into segments of at most
+/// [defaultSoakSegment] each. Every segment restarts from the entry but the
+/// visit counts are shared, so later segments take edges earlier ones didn't.
+/// Each segment is its own [PlanPath], which is what gives soak resilience: the
+/// runner walks paths independently (returning to start between them), so a
+/// stumble in one segment never blocks the others. One segment with no leaving
+/// edges stops early (dead end). The seed's PRNG fixes every choice, so the
+/// same graph + seed + budget yields a byte-identical plan.
 List<PlanPath> _soak(Graph graph, List<String> entries, int seed, int steps) {
   if (entries.isEmpty) {
     return const [];
@@ -100,35 +110,43 @@ List<PlanPath> _soak(Graph graph, List<String> entries, int seed, int steps) {
   int count(String key) => visits.where((v) => v == key).length;
 
   final start = entries.first;
-  final stepList = <PlanStep>[];
-  var current = start;
-  for (var i = 0; i < steps; i++) {
-    final edges = graph.byId[current]!.payload.edges;
-    if (edges.isEmpty) {
-      break; // dead end — a node with nothing to do
+  final paths = <PlanPath>[];
+  var remaining = steps;
+  while (remaining > 0) {
+    final segment =
+        remaining < defaultSoakSegment ? remaining : defaultSoakSegment;
+    final stepList = <PlanStep>[];
+    var current = start;
+    for (var i = 0; i < segment; i++) {
+      final edges = graph.byId[current]!.payload.edges;
+      if (edges.isEmpty) {
+        break; // dead end — restart from the entry in the next segment
+      }
+      // Indices of the edges with the lowest visit count, in edge order.
+      final keys = [for (var e = 0; e < edges.length; e++) '$current#$e'];
+      final counts = keys.map(count).toList();
+      final min = counts.reduce((a, b) => a < b ? a : b);
+      final leastVisited = [
+        for (var e = 0; e < edges.length; e++)
+          if (counts[e] == min) e,
+      ];
+      final chosen = leastVisited[rng.nextInt(leastVisited.length)];
+      final edge = edges[chosen];
+      visits.add(keys[chosen]);
+      stepList.add(PlanStep(
+        action: edge.action,
+        to: edge.target,
+        key: edge.key,
+        text: edge.text,
+        uri: edge.uri,
+        direction: edge.direction,
+      ));
+      current = edge.target;
     }
-    // Indices of the edges with the lowest visit count, in edge order.
-    final keys = [for (var e = 0; e < edges.length; e++) '$current#$e'];
-    final counts = keys.map(count).toList();
-    final min = counts.reduce((a, b) => a < b ? a : b);
-    final leastVisited = [
-      for (var e = 0; e < edges.length; e++)
-        if (counts[e] == min) e,
-    ];
-    final chosen = leastVisited[rng.nextInt(leastVisited.length)];
-    final edge = edges[chosen];
-    visits.add(keys[chosen]);
-    stepList.add(PlanStep(
-      action: edge.action,
-      to: edge.target,
-      key: edge.key,
-      text: edge.text,
-      uri: edge.uri,
-      direction: edge.direction,
-    ));
-    current = edge.target;
+    paths.add(PlanPath(start: start, steps: stepList));
+    remaining -= segment;
   }
-  return [PlanPath(start: start, steps: stepList)];
+  return paths;
 }
 
 /// Paths covering each node a PR touched ([changedNodeIds]) *and every edge into

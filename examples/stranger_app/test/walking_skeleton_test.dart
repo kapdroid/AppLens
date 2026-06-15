@@ -9,7 +9,7 @@ import 'package:stranger_app/cart_model.dart';
 import 'package:stranger_app/main.dart';
 
 void main() {
-  testWidgets('walks the 10-node graph (smoke) across all three modules', (
+  testWidgets('walks the 11-node graph (smoke) across all three modules', (
     tester,
   ) async {
     final observer = AppLensNavigatorObserver();
@@ -59,6 +59,70 @@ void main() {
     await tester.pumpAndSettle();
     await driver.scrollTo(const KeySelector('product_40'));
     expect(find.byKey(const Key('product_40')), findsOneWidget);
+  });
+
+  testWidgets('the product detail screen reports its named route', (
+    tester,
+  ) async {
+    // onGenerateRoute must forward `settings:` so the pushed route keeps its
+    // name — otherwise the NavigatorObserver sees a null route and shop.product
+    // (identity route /product) can never match. Smoke never reaches product
+    // (it's not a `routes:` entry), so only a soak/regression walk exposes this.
+    final observer = AppLensNavigatorObserver();
+    await tester.pumpWidget(
+      StrangerApp(cart: CartModel(), navigatorObservers: [observer]),
+    );
+    await tester.pumpAndSettle();
+    final driver = appLensWidgetDriver(tester);
+
+    await driver.tap(const KeySelector('btn_start_shopping'));
+    await tester.pumpAndSettle();
+    await driver.tap(const KeySelector('product_0'));
+    await tester.pumpAndSettle();
+
+    final fp = await WidgetFingerprintSource(driver, observer).capture();
+    expect(fp.route, '/product', reason: 'the generated route must be named');
+    expect(fp.anchors, containsAll(['btn_add_to_cart', 'lbl_product_name']));
+  });
+
+  testWidgets('the filled cart is flag-distinguished and backs to the product',
+      (
+    tester,
+  ) async {
+    // Adding a product opens the filled cart: cart_count inference is > 0 (so it
+    // matches shop.cart, not shop.cart_empty), and because the only way in is a
+    // product's "add to cart", back pops to that product.
+    final observer = AppLensNavigatorObserver();
+    await tester.pumpWidget(
+      StrangerApp(cart: CartModel(), navigatorObservers: [observer]),
+    );
+    await tester.pumpAndSettle();
+    final driver = appLensWidgetDriver(tester);
+    final fingerprints = WidgetFingerprintSource(
+      driver,
+      observer,
+      flags: const UiInferenceFlagSource(
+        [CountProbe('cart_count', 'cart_item_')],
+      ),
+    );
+
+    await driver.tap(const KeySelector('btn_start_shopping'));
+    await tester.pumpAndSettle();
+    await driver.tap(const KeySelector('product_0'));
+    await tester.pumpAndSettle();
+    await driver.tap(const KeySelector('btn_add_to_cart'));
+    await tester.pumpAndSettle();
+
+    final filled = await fingerprints.capture();
+    expect(filled.route, '/cart');
+    expect(filled.anchors,
+        containsAll(['list_cart_items', 'btn_place_order', 'lbl_total']));
+    expect(filled.flags['cart_count'], '1', reason: 'one item added');
+
+    await driver.back();
+    await tester.pumpAndSettle();
+    final afterBack = await fingerprints.capture();
+    expect(afterBack.route, '/product', reason: 'back pops to the product');
   });
 
   testWidgets('the action engine enters text into the login form', (

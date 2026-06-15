@@ -6,10 +6,13 @@ identity:
 payload:
   assertions:
     - { type: widget_exists, key: btn_place_order }
-    - { type: text_equals, key: lbl_total, source: computed }
+    # The total is dynamic, so tier 1 only checks the label is present; the
+    # semantic tier (2.5) verifies its text against a recorded baseline.
+    - { type: widget_exists, key: lbl_total }
   edges:
     - { action: tap, key: btn_place_order, target: confirm }
-    - { action: back, target: catalog }
-  guards: { requires: [journey.started] }
+    # The only way into the filled cart is "add to cart" from a product, so
+    # back pops to that product (not the catalog).
+    - { action: back, target: product }
   tags: [shopping]
   owner: team-shop

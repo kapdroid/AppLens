@@ -1,0 +1,14 @@
+# The empty-cart state — same /cart route as the filled cart, told apart by
+# cart_count == 0 (the filled cart constrains cart_count > 0). Reached from the
+# dashboard's "view cart" on a fresh launch, before anything is added.
+identity:
+  route: /cart
+  anchors: [lbl_empty_cart]
+  flags: { cart_count: "0" }
+payload:
+  assertions:
+    - { type: widget_exists, key: lbl_empty_cart }
+  edges:
+    - { action: back, target: dashboard }
+  tags: [shopping]
+  owner: team-shop
