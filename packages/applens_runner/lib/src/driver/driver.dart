@@ -49,8 +49,10 @@ abstract interface class AppLensDriver {
   /// geometry — swipe edges carry a direction, not raw coordinates.
   Future<void> swipe(SwipeDirection direction, {WidgetSelector? on});
 
-  /// Pops the current route (in-Flutter back).
-  Future<void> back();
+  /// Pops the current route (in-Flutter back). Returns whether a route was
+  /// actually popped — false means the navigator is at its root and could not
+  /// go back (so callers like return-to-start know to stop).
+  Future<bool> back();
 
   /// Opens [uri] as a deep link through the platform channel.
   Future<void> openDeepLink(Uri uri);

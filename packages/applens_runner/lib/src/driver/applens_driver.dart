@@ -170,14 +170,15 @@ class AppLensWidgetDriver implements AppLensDriver {
   }
 
   @override
-  Future<void> back() async {
+  Future<bool> back() async {
     // The in-Flutter equivalent of the system back button: pop the root
     // navigator (honoring PopScope), without the @protected handlePopRoute.
+    // maybePop returns whether it popped — false at the root (nothing to pop).
     final navigator = find.byType(Navigator);
     if (navigator.evaluate().isEmpty) {
       throw const DriverException('back(): no Navigator on screen');
     }
-    await _guard(
+    return _guard(
         'back', () => tester.state<NavigatorState>(navigator.first).maybePop());
   }
 

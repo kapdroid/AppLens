@@ -10,6 +10,7 @@ import '../visual/capture_scope.dart';
 import '../visual/proposal_source.dart';
 import '../visual/visual_tier.dart';
 import 'fingerprint.dart';
+import 'nav_stack.dart';
 import 'node_matcher.dart';
 import 'semantic.dart';
 import 'structural_source.dart';
@@ -163,6 +164,9 @@ class Orchestrator {
             graph, path.start, entryFingerprint, step++, path.start),
       );
     }
+    // Mirror the app's Navigator stack as we walk, so a `back` step is matched
+    // against the screen actually pushed (path-relative), not a static target.
+    final nav = NavStack(path.start);
     for (final planStep in path.steps) {
       if (blocked) {
         visits.add(
@@ -189,9 +193,16 @@ class Orchestrator {
       final fingerprint = await fingerprints.capture();
       final matched = matchNode(fingerprint, graph);
 
-      if (!actionFailed && matched == planStep.to) {
+      // A `back` is path-relative: it lands on the screen actually pushed (the
+      // nav-stack predecessor), not the edge's static target — which is correct
+      // only on the canonical path. Forward steps expect their declared target.
+      final expected =
+          planStep.action == EdgeAction.back ? nav.predecessor : planStep.to;
+
+      if (!actionFailed && matched == expected) {
+        _advanceNav(nav, planStep);
         visits.add(
-          await _evaluate(graph, planStep.to, fingerprint, step++, planStep.to),
+          await _evaluate(graph, expected, fingerprint, step++, expected),
         );
         continue;
       }
@@ -202,14 +213,14 @@ class Orchestrator {
       visits.add(
         NodeVisit(
           step: step++,
-          expectedNodeId: planStep.to,
+          expectedNodeId: expected,
           matchedNodeId: matched,
           outcome: NodeOutcome.failedHard,
           artifacts: await _artifacts(),
         ),
       );
       final reroutedStep =
-          await _reroute(graph, plan, planStep.to, visits, step);
+          await _reroute(graph, plan, expected, visits, step, nav);
       if (reroutedStep == null) {
         blocked = true;
       } else {
@@ -217,6 +228,16 @@ class Orchestrator {
       }
     }
     return step;
+  }
+
+  /// Mirrors a successful step onto the nav stack: a forward step pushes its
+  /// target, a `back` pops to the predecessor.
+  void _advanceNav(NavStack nav, PlanStep planStep) {
+    if (planStep.action == EdgeAction.back) {
+      nav.pop();
+    } else {
+      nav.push(planStep.to);
+    }
   }
 
   Future<NodeVisit> _evaluate(
@@ -470,6 +491,7 @@ class Orchestrator {
     String target,
     List<NodeVisit> visits,
     int startStep,
+    NavStack nav,
   ) async {
     var step = startStep;
     for (final alternate
@@ -496,6 +518,12 @@ class Orchestrator {
       }
       final fingerprint = await fingerprints.capture();
       if (matchNode(fingerprint, graph) == target) {
+        // The walk now continues from `target` via this alternate, so rebuild
+        // the nav stack to mirror the alternate's route (entry → … → target).
+        nav.reset(alternate.start);
+        for (final replayedStep in alternate.steps) {
+          _advanceNav(nav, replayedStep);
+        }
         visits.add(await _evaluate(graph, target, fingerprint, step++, target));
         return step;
       }
@@ -558,33 +586,27 @@ class Orchestrator {
   static const int _maxReturnPops = 24;
 
   /// Pops back toward [start] (an entry node) until the live state matches it,
-  /// bounded by [_maxReturnPops], and returns the final observation (the start
-  /// node's fingerprint). Best-effort: if it cannot reach [start], the caller's
-  /// entry evaluation records the mismatch instead of the walk acting on the
-  /// wrong screen.
+  /// or [back] reports the navigator is at its root and cannot pop further,
+  /// bounded by [_maxReturnPops] as a runaway guard. Returns the final
+  /// observation. If [start] is genuinely unreachable, the caller records the
+  /// loud hard-fail rather than the walk acting on the wrong screen. The flat
+  /// root navigator means popping always reaches the entry, so this normally
+  /// stops on a match, not on the bound.
   Future<Fingerprint> _returnToStart(Graph graph, String start) async {
     var fingerprint = await fingerprints.capture();
-    var signature = _fingerprintSignature(fingerprint);
     for (var pops = 0;
         matchNode(fingerprint, graph) != start && pops < _maxReturnPops;
         pops++) {
-      await driver.back();
+      final popped = await driver.back();
       await driver.settle(settlePolicy);
       fingerprint = await fingerprints.capture();
-      final next = _fingerprintSignature(fingerprint);
-      if (next == signature) {
-        // back() changed nothing observable (e.g. already at the root) — give
-        // up. Compares the whole fingerprint, not just the matched node, so two
-        // stacked screens that share a node id aren't mistaken for "stuck".
+      if (!popped) {
+        // Nothing left to pop (already at the root); stop rather than spin.
         break;
       }
-      signature = next;
     }
     return fingerprint;
   }
-
-  String _fingerprintSignature(Fingerprint fp) =>
-      '${fp.route}|${(fp.anchors.toList()..sort()).join(',')}|${fp.overlay}';
 
   Future<List<Artifact>> _artifacts() async {
     // Tier-0 evidence: the serialized tree + a log placeholder. Full-screen

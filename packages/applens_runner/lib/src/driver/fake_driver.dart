@@ -44,7 +44,13 @@ class FakeDriver implements AppLensDriver {
           'swipe ${direction.yaml}${on == null ? '' : ' on ${describeSelector(on)}'}');
 
   @override
-  Future<void> back() async => actionLog.add('back');
+  Future<bool> back() async {
+    actionLog.add('back');
+    // The fake has no real navigator; report "popped" so return-to-start relies
+    // on node matching (driven by the scripted fingerprints) to know when it has
+    // reached the start, with _maxReturnPops as the backstop.
+    return true;
+  }
 
   @override
   Future<void> openDeepLink(Uri uri) async =>

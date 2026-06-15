@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:math';
 
 import '../model/edge.dart';
+import '../model/edge_action.dart';
 import '../model/graph.dart';
 import 'plan.dart';
 
@@ -249,6 +250,14 @@ List<PlanPath> _regression(
       covered.add(key(current, chosen));
       hops.add(_Hop(current, edges[chosen], chosen));
       current = edges[chosen].target;
+      // A `back` pops the navigator to a path-relative predecessor, not a fixed
+      // node, so the compiler can't know where the next forward step would start
+      // from. End the segment here; the next one restarts cleanly from an entry
+      // (the runner re-anchors via return-to-start). This keeps every path
+      // executable as planned while still covering every edge across segments.
+      if (edges[chosen].action == EdgeAction.back) {
+        break;
+      }
     }
     paths.add(_PathTo(reached.start, current, hops).toPlanPath());
   }
