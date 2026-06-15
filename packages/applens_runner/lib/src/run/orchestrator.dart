@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:applens_compare/applens_compare.dart';
@@ -34,6 +35,7 @@ class Orchestrator {
     this.structuralBaselines,
     this.proposals,
     this.captureContext,
+    this.onPathStart,
   });
 
   final AppLensDriver driver;
@@ -57,6 +59,14 @@ class Orchestrator {
   /// The profile this run captures under. When null, any approved baseline
   /// matches (single-profile v1); when set, a baseline's context must match.
   final BaselineContext? captureContext;
+
+  /// Optional hook invoked once at the start of each plan path, before the path
+  /// is observed — the seam the entrypoint uses to reset app/SDK state between
+  /// paths (`AppLensState.reset()`, clearing domain models like a cart) so a
+  /// flag or item left set by one path can't contaminate the next path's
+  /// matching. The runner can't reset that state itself — it must not depend on
+  /// the app or `applens_sdk` — so it exposes this callback. Null = no reset.
+  final FutureOr<void> Function()? onPathStart;
 
   /// Nodes whose tier-3 baseline has been compared this run. A golden captures a
   /// node's *canonical* appearance, so it is compared on the first reach only —
@@ -119,6 +129,11 @@ class Orchestrator {
     int startStep,
   ) async {
     var step = startStep;
+
+    // Reset app/SDK state before anything else, so nothing the previous path
+    // set (SDK flags, cart contents) leaks into this path's observations.
+    // Navigation reset (return-to-start) follows; state reset must precede it.
+    await onPathStart?.call();
 
     // Between plan paths the app is left wherever the previous path ended;
     // return to this path's start (an entry node) before observing it, so a

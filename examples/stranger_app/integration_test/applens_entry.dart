@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:applens_core/applens_core.dart';
 import 'package:applens_runner/applens_runner.dart';
+import 'package:applens_sdk/applens_sdk.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,8 +19,9 @@ void main() {
 
   testWidgets('AppLens walks the stranger graph (smoke)', (tester) async {
     final observer = AppLensNavigatorObserver();
+    final cart = CartModel();
     await tester.pumpWidget(
-      StrangerApp(cart: CartModel(), navigatorObservers: [observer]),
+      StrangerApp(cart: cart, navigatorObservers: [observer]),
     );
     await tester.pumpAndSettle();
 
@@ -93,6 +95,14 @@ void main() {
       baselines: MapBaselineSource(goldens),
       // Tier 2.5: diff watched widgets' text + geometry against the snapshots.
       structuralBaselines: MapStructuralBaselineSource(structural),
+      // Reset between paths so one path's state can't leak into the next: clear
+      // the app's cart (this app's real cross-path state, seen via UI inference)
+      // and AppLensState (the SDK-flag tier's registry; a no-op here since the
+      // stranger app records nothing, but the pattern an SDK-using app follows).
+      onPathStart: () {
+        AppLensState.reset();
+        cart.clear();
+      },
     );
     final record = await orchestrator.run(graph, plan);
 

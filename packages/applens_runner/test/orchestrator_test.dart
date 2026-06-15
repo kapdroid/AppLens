@@ -63,6 +63,20 @@ class _ScriptedFingerprints implements FingerprintSource {
   }
 }
 
+/// Wraps a [FingerprintSource], appending 'capture' to [log] on every read, so
+/// a test can assert the ordering of resets relative to observations.
+class _LoggingFingerprints implements FingerprintSource {
+  _LoggingFingerprints(this._inner, this._log);
+  final FingerprintSource _inner;
+  final List<String> _log;
+
+  @override
+  Future<Fingerprint> capture() async {
+    _log.add('capture');
+    return _inner.capture();
+  }
+}
+
 /// A driver whose tap always throws, modelling an absent/non-actionable widget.
 class _ThrowingTapDriver extends FakeDriver {
   @override
@@ -204,6 +218,50 @@ void main() {
     );
     expect(record.visits.last.matchedNodeId, 'A');
     expect(driver.actionLog, contains('back')); // it popped to return to start
+  });
+
+  test('onPathStart fires once before each path is observed', () async {
+    // The reset hook the entrypoint wires to clear app/SDK state between paths.
+    // It must run at the very start of every path, before that path's first
+    // observation, so leaked state can't contaminate the next path's matching.
+    final graph = Graph(
+      nodes: [_node('A', '/a'), _node('B', '/b')],
+      entryNodeIds: ['A'],
+    );
+    final plan = _plan([
+      PlanPath(start: 'A', steps: [_tap('B', 'k_ab')]),
+      const PlanPath(start: 'A'),
+    ]);
+    final events = <String>[];
+    final record = await Orchestrator(
+      driver: FakeDriver(),
+      fingerprints: _LoggingFingerprints(
+        _ScriptedFingerprints(
+          const [
+            _fpA,
+            Fingerprint(route: '/b'),
+            Fingerprint(route: '/b'),
+            _fpA
+          ],
+        ),
+        events,
+      ),
+      store: InMemoryRunStore(),
+      onPathStart: () => events.add('reset'),
+    ).run(graph, plan);
+
+    expect(
+        record.visits.map((v) => v.outcome), everyElement(NodeOutcome.passed));
+    expect(events.where((e) => e == 'reset').length, 2,
+        reason: 'once per path');
+    expect(events.first, 'reset',
+        reason: 'reset precedes the first observation');
+    // The second reset precedes path 2's first capture (no capture between the
+    // two resets would mean a path was observed before being reset).
+    final firstReset = events.indexOf('reset');
+    final secondReset = events.indexOf('reset', firstReset + 1);
+    expect(events[secondReset + 1], 'capture',
+        reason: 'path 2 is observed only after its reset');
   });
 
   test('a step whose widget is absent is a hard failure, not a run crash',

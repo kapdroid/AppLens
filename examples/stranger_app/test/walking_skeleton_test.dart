@@ -125,6 +125,84 @@ void main() {
     expect(afterBack.route, '/product', reason: 'back pops to the product');
   });
 
+  group('cross-path state reset (onPathStart)', () {
+    // Path 1 adds a product (fills the cart); path 2 backs out and views the
+    // cart from the dashboard, expecting the empty-cart node. Without a reset
+    // the leaked item makes path 2 land on the filled cart; with it, the cart
+    // is cleared between paths and the empty-cart node matches.
+    Plan fillThenCheckEmpty(Graph graph) => Plan(
+          strategy: PlanStrategy.soak,
+          graphHash: graph.contentHash,
+          seed: 0,
+          paths: [
+            PlanPath(start: 'shop.dashboard', steps: const [
+              PlanStep(
+                  action: EdgeAction.tap,
+                  to: 'shop.catalog',
+                  key: 'btn_start_shopping'),
+              PlanStep(
+                  action: EdgeAction.tap, to: 'shop.product', key: 'product_0'),
+              PlanStep(
+                  action: EdgeAction.tap,
+                  to: 'shop.cart',
+                  key: 'btn_add_to_cart'),
+            ]),
+            PlanPath(start: 'shop.dashboard', steps: const [
+              PlanStep(
+                  action: EdgeAction.tap,
+                  to: 'shop.cart_empty',
+                  key: 'btn_view_cart'),
+            ]),
+          ],
+        );
+
+    Future<RunRecord> walk(WidgetTester tester, {required bool reset}) async {
+      final observer = AppLensNavigatorObserver();
+      final cart = CartModel();
+      await tester.pumpWidget(
+        StrangerApp(cart: cart, navigatorObservers: [observer]),
+      );
+      await tester.pumpAndSettle();
+      final driver = appLensWidgetDriver(tester);
+      final graph = loadGraph('qa_graph');
+      return Orchestrator(
+        driver: driver,
+        fingerprints: WidgetFingerprintSource(
+          driver,
+          observer,
+          flags: const UiInferenceFlagSource(
+            [CountProbe('cart_count', 'cart_item_')],
+          ),
+        ),
+        store: InMemoryRunStore(),
+        onPathStart: reset ? () => cart.clear() : null,
+      ).run(graph, fillThenCheckEmpty(graph));
+    }
+
+    testWidgets('without it, a prior path leaks cart state (the bug)',
+        (tester) async {
+      final record = await walk(tester, reset: false);
+      final cartEmpty = record.visits
+          .firstWhere((v) => v.expectedNodeId == 'shop.cart_empty');
+      expect(cartEmpty.outcome, isNot(NodeOutcome.passed),
+          reason: 'the leaked item makes it match the filled cart');
+      expect(cartEmpty.matchedNodeId, 'shop.cart');
+    });
+
+    testWidgets('with it, the cart is cleared and the empty cart matches',
+        (tester) async {
+      final record = await walk(tester, reset: true);
+      expect(
+        record.visits.every((v) => v.outcome == NodeOutcome.passed),
+        isTrue,
+        reason: record.visits
+            .map((v) =>
+                '${v.expectedNodeId}:${v.outcome.name}:${v.matchedNodeId}')
+            .join(', '),
+      );
+    });
+  });
+
   testWidgets('the action engine enters text into the login form', (
     tester,
   ) async {

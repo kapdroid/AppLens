@@ -229,6 +229,8 @@ The compiler also precomputes, for every node, its top-k alternate inbound paths
 
 The runner executes a plan node by node. Its responsibilities, in order per step: perform the edge action through DriverInterface, stabilize, fingerprint the resulting state, match it to the expected node, execute the oracle tiers, capture artifacts, record the visit, choose the next step (or reroute).
 
+Between plan paths the runner first resets state, then navigation. State reset runs through an `onPathStart` hook the entrypoint supplies (the runner can't reset app or SDK state itself without depending on those packages) — it clears the SDK registry (`AppLensState.reset()`) and any app domain state (e.g. an in-memory cart) so a flag or item one path set can't contaminate the next path's matching. Navigation reset (return-to-start) then pops back to the path's entry node. Without the state reset, leaked state silently mismatches later paths — a green/red verdict for the wrong reason.
+
 **DriverInterface** is the ownership boundary — roughly ten methods, defined day one, with a hard rule that nothing above it imports Patrol directly:
 
 ```dart
