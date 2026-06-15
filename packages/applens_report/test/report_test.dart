@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:applens_core/applens_core.dart';
 import 'package:applens_report/applens_report.dart';
 import 'package:test/test.dart';
@@ -90,6 +92,43 @@ void main() {
     );
     expect(html, contains('<svg'));
     expect(html, contains('#b00020')); // failing node highlighted red
+  });
+
+  test('embeds an annotated highlight image for a semantic failure', () {
+    final run = RunRecord(
+      id: 'r',
+      strategy: 'smoke',
+      graphHash: 'sha256:abc',
+      seed: 0,
+      visits: [
+        NodeVisit(
+          step: 0,
+          expectedNodeId: 'shop.cart',
+          matchedNodeId: 'shop.cart',
+          outcome: NodeOutcome.failedSoft,
+          assertions: const [
+            AssertionResult(
+              tierOrder: 25,
+              type: 'semantic_match',
+              passed: false,
+              detail: 'btn_place_order: "Place order" → "Order"',
+            ),
+          ],
+          artifacts: [
+            Artifact(
+              kind: 'annotated',
+              description: 'semantic shop.cart: text changed',
+              bytes: Uint8List.fromList(const [137, 80, 78, 71]), // 'PNG' magic
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final html = renderRunReport(run, _graph);
+    expect(html, contains('data:image/png;base64,'));
+    expect(html, contains('semantic shop.cart: text changed'));
+    expect(html, contains('Place order')); // the change is shown in the detail
   });
 
   test('renders a pending section with a confirm-in-PR link', () {

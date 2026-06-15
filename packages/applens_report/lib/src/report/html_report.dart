@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:applens_core/applens_core.dart';
 
 import 'graph_view.dart';
@@ -114,6 +116,20 @@ String renderRunReport(RunRecord run, Graph graph, {TriageReport? triage}) {
         out.writeln(
           '<p><code>${escapeXml(path)}</code> — expected node $landed</p>',
         );
+      }
+      // The localized failure highlight: the annotated screenshot (semantic
+      // tier) or the tier-3 diff overlay, embedded inline so the report is a
+      // single self-contained file (ARCHITECTURE.md §8/§13).
+      for (final art in visit.artifacts) {
+        final bytes = art.bytes;
+        if ((art.kind == 'annotated' || art.kind == 'diff') && bytes != null) {
+          out.writeln(
+            '<figure class="evidence">'
+            '<img alt="${escapeXml(art.kind)}" '
+            'src="data:image/png;base64,${base64Encode(bytes)}"/>'
+            '<figcaption>${escapeXml(art.description)}</figcaption></figure>',
+          );
+        }
       }
       final verdict = verdicts[visit.expectedNodeId];
       if (verdict != null) {

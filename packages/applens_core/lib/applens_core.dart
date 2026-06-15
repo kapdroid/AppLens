@@ -9,6 +9,7 @@ export 'src/model/edge_action.dart';
 export 'src/model/flag_constraint.dart';
 export 'src/model/graph.dart';
 export 'src/model/node.dart';
+export 'src/model/structural.dart';
 
 // YAML parsing and serialization.
 export 'src/parse/graph_parser.dart';

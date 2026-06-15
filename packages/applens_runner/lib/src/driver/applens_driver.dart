@@ -345,8 +345,18 @@ class AppLensWidgetDriver implements AppLensDriver {
       type: element.widget.runtimeType.toString(),
       key: _keyOf(element),
       rect: _rectOf(element),
+      text: _textOf(element),
       children: children,
     );
+  }
+
+  String? _textOf(Element element) {
+    final w = element.widget;
+    if (w is Text) {
+      return w.data ?? w.textSpan?.toPlainText(includeSemanticsLabels: false);
+    }
+    if (w is RichText) return w.text.toPlainText(includeSemanticsLabels: false);
+    return null;
   }
 
   /// Global painted bounds for box-backed elements; null for non-box render

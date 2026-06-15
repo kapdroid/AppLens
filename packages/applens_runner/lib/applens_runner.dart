@@ -14,6 +14,8 @@ export 'src/visual/proposal_source.dart';
 // seam, and SQLite store live in applens_core (shared by the CLI and report).
 export 'src/run/fingerprint.dart';
 export 'src/run/orchestrator.dart';
+export 'src/run/semantic.dart';
+export 'src/run/structural_source.dart';
 export 'src/run/widget_fingerprint_source.dart';
 
 // Tree-shape hash (tier-2): shared with the crawler's state clustering (§11),

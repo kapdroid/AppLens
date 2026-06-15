@@ -100,6 +100,7 @@ class SerializedWidget {
     required this.type,
     this.key,
     this.rect,
+    this.text,
     this.children = const <SerializedWidget>[],
   });
 
@@ -110,6 +111,9 @@ class SerializedWidget {
   /// sized box; null for non-box render objects (e.g. slivers). Feeds the
   /// tier-2 relative-geometry buckets (docs/ARCHITECTURE.md §8).
   final Rect? rect;
+
+  /// The plain-text string for Text / RichText widgets; null for all others.
+  final String? text;
 
   final List<SerializedWidget> children;
 }

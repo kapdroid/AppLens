@@ -6,6 +6,7 @@ import '../model/edge_action.dart';
 import '../model/flag_constraint.dart';
 import '../model/graph.dart';
 import '../model/node.dart';
+import '../model/structural.dart';
 import '../util/source_location.dart';
 
 /// Thrown when YAML cannot be parsed into a model, carrying the precise
@@ -164,10 +165,64 @@ NodePayload _parsePayload(_Reader reader) {
   return NodePayload(
     assertions: _parseAssertions(r),
     visualBaselines: _parseBaselines(r),
+    structuralBaselines: _parseStructuralBaselines(r),
+    watch: _parseWatch(r),
     edges: _parseEdges(r),
     guard: _parseGuard(r),
     tags: r.stringList('tags'),
     owner: r.optString('owner'),
+  );
+}
+
+List<StructuralBaseline> _parseStructuralBaselines(_Reader reader) {
+  final list = reader.listOf('structural_baselines');
+  if (list == null) {
+    return const [];
+  }
+  return [
+    for (final item in list.nodes)
+      _parseStructuralBaseline(
+          reader.asMap(item, 'structural_baseline'), reader.source),
+  ];
+}
+
+StructuralBaseline _parseStructuralBaseline(YamlMap map, String source) {
+  final reader = _Reader(map, source);
+  final contextMap = reader.mapOf('context');
+  final contextReader = contextMap == null ? null : _Reader(contextMap, source);
+  final stateName = reader.optString('state') ?? BaselineState.proposed.name;
+  final state = BaselineState.fromYaml(stateName);
+  if (state == null) {
+    reader.fail(
+      'unknown baseline state "$stateName" (expected: '
+      '${BaselineState.values.map((s) => s.name).join(', ')})',
+      map.nodes['state'] ?? map,
+    );
+  }
+  return StructuralBaseline(
+    context: BaselineContext(
+      device: contextReader?.optString('device') ?? '',
+      locale: contextReader?.optString('locale') ?? '',
+      theme: contextReader?.optString('theme') ?? '',
+    ),
+    state: state,
+    snapshot: reader.optString('snapshot'),
+    approvedBy: reader.optString('approved_by'),
+    reasonPr: reader.optString('reason_pr'),
+    replaced: reader.optString('replaced'),
+  );
+}
+
+WatchSpec? _parseWatch(_Reader reader) {
+  final map = reader.mapOf('watch');
+  if (map == null) {
+    return null;
+  }
+  final r = _Reader(map, reader.source);
+  return WatchSpec(
+    keys: r.stringList('keys'),
+    text: r.optBool('text') ?? true,
+    layout: r.optBool('layout') ?? true,
   );
 }
 
@@ -390,6 +445,18 @@ class _Reader {
       fail('"$key" must be a number', node);
     }
     return value.toDouble();
+  }
+
+  bool? optBool(String key) {
+    final node = _node(key);
+    if (node == null) {
+      return null;
+    }
+    final value = node.value;
+    if (value is! bool) {
+      fail('"$key" must be a boolean', node);
+    }
+    return value;
   }
 
   List<String> stringList(String key) {

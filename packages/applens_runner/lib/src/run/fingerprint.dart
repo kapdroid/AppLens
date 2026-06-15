@@ -4,12 +4,17 @@ class Fingerprint {
   const Fingerprint({
     this.route,
     this.anchors = const {},
+    this.texts = const {},
     this.flags = const {},
     this.overlay = false,
   });
 
   final String? route;
   final Set<String> anchors;
+
+  /// Plain-text content for each keyed widget (first Text descendant wins).
+  final Map<String, String> texts;
+
   final Map<String, String> flags;
   final bool overlay;
 }

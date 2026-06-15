@@ -11,5 +11,9 @@ payload:
     - { action: back, target: shop.dashboard }
   visual_baselines:
     - { capture: full_screen, state: approved, image: "sha256:94e95ff29e6b75c169554b3dac4d0e911745d93315e3735c3c4e5f64d03c253e" }
+  structural_baselines:
+    - { state: approved, snapshot: "sha256:2e38d276d77cc09b70ae453bb185fef28803bf4c99cf26c4a7f95de6258534ce" }
+  watch:
+    keys: [lbl_help, btn_open_settings]
   tags: [support, sanity]
   owner: team-support

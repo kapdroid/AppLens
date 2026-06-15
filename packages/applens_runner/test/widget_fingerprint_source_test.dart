@@ -53,6 +53,35 @@ void main() {
     expect(observer.currentRoute, '/');
   });
 
+  testWidgets(
+      'texts map carries the first Text descendant for each keyed widget', (
+    tester,
+  ) async {
+    final observer = AppLensNavigatorObserver();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorObservers: [observer],
+        home: Scaffold(
+          body: Column(children: const [
+            ElevatedButton(
+              key: Key('btn_start'),
+              onPressed: null,
+              child: Text('Start shopping'),
+            ),
+            Text('plain', key: Key('lbl_plain')),
+          ]),
+        ),
+      ),
+    );
+
+    final source =
+        WidgetFingerprintSource(AppLensWidgetDriver(tester), observer);
+    final fingerprint = await source.capture();
+
+    expect(fingerprint.texts['btn_start'], 'Start shopping');
+    expect(fingerprint.texts['lbl_plain'], 'plain');
+  });
+
   testWidgets('an unnamed top route reports a null route (not the stale name)',
       (
     tester,

@@ -8,6 +8,8 @@ import '../visual/proposal_source.dart';
 import '../visual/visual_tier.dart';
 import 'fingerprint.dart';
 import 'node_matcher.dart';
+import 'semantic.dart';
+import 'structural_source.dart';
 import 'tier1.dart';
 import 'tier2.dart';
 
@@ -27,6 +29,7 @@ class Orchestrator {
     required this.store,
     this.settlePolicy = const SettlePolicy(),
     this.baselines,
+    this.structuralBaselines,
     this.proposals,
     this.captureContext,
   });
@@ -39,6 +42,10 @@ class Orchestrator {
   /// Loads approved baseline images for tier 3. Null disables tier 3 entirely
   /// (the default headless/no-visual config).
   final BaselineSource? baselines;
+
+  /// Loads approved semantic snapshots for tier 2.5 (text + geometry). Null
+  /// disables the semantic tier entirely (the default).
+  final StructuralBaselineSource? structuralBaselines;
 
   /// Open baseline proposals (ARCHITECTURE.md §9). When a capture drifts from
   /// the approved baseline but matches an open proposal, the node is `pending`
@@ -55,8 +62,13 @@ class Orchestrator {
   /// (mid-transition, post-back) that are not regressions.
   final Set<String> _tier3Evaluated = <String>{};
 
+  /// Nodes whose semantic (tier-2.5) baseline has been compared this run —
+  /// same canonical-appearance, first-reach-only rule as tier 3.
+  final Set<String> _semanticEvaluated = <String>{};
+
   Future<RunRecord> run(Graph graph, Plan plan, {String runId = 'run'}) async {
     _tier3Evaluated.clear();
+    _semanticEvaluated.clear();
     final visits = <NodeVisit>[];
     var step = 0;
     for (final path in plan.paths) {
@@ -207,6 +219,60 @@ class Orchestrator {
     if (!_anyFailed(assertions) && _wantsTier2(node)) {
       assertions.addAll(evaluateTier2(node, await driver.tree()));
     }
+
+    // Tier 2.5 (semantic): diff the node's recorded text + geometry against the
+    // live tree, scoped by its `watch` hint. Deterministic and gating; the
+    // evidence screenshot is best-effort. First reach only (canonical state).
+    if (!_anyFailed(assertions) &&
+        structuralBaselines != null &&
+        !_semanticEvaluated.contains(expected)) {
+      final sb = _approvedStructuralFor(node);
+      if (sb != null) {
+        _semanticEvaluated.add(expected);
+        try {
+          final baselineSnap = await structuralBaselines!.load(sb);
+          if (baselineSnap == null) {
+            assertions.add(const AssertionResult(
+              tierOrder: semanticOrder,
+              type: 'semantic_match',
+              passed: true,
+              skipped: true,
+              detail: 'semantic baseline snapshot absent',
+            ));
+          } else {
+            final live = captureStructural(await driver.tree());
+            final findings = diffStructural(
+              matchWidgets(baselineSnap.widgets, live.widgets),
+              watch: node.payload.watch ?? const WatchSpec(),
+            );
+            assertions.add(semanticResult(findings));
+            if (findings.isNotEmpty) {
+              try {
+                final capture = await driver.capture(const FullScreenScope());
+                extraArtifacts.add(Artifact(
+                  kind: 'annotated',
+                  description: 'semantic ${node.id}: '
+                      '${findings.map((f) => f.describe()).join('; ')}',
+                  bytes: annotateFindings(capture, findings),
+                ));
+              } on Exception {
+                // The evidence screenshot is best-effort; the verdict stands.
+              }
+            }
+          }
+        } on Exception catch (error) {
+          // Baseline-load IO faults are advisory — skip, never abort the run.
+          assertions.add(AssertionResult(
+            tierOrder: semanticOrder,
+            type: 'semantic_match',
+            passed: true,
+            skipped: true,
+            detail: 'semantic evidence skipped: $error',
+          ));
+        }
+      }
+    }
+
     var pending = false;
     if (!_anyFailed(assertions) && !_tier3Evaluated.contains(expected)) {
       final baseline = _approvedBaselineFor(node);
@@ -334,6 +400,24 @@ class Orchestrator {
       return null;
     }
     for (final baseline in node.payload.visualBaselines) {
+      if (baseline.state != BaselineState.approved) {
+        continue;
+      }
+      final context = captureContext;
+      if (context == null ||
+          (baseline.context.device == context.device &&
+              baseline.context.locale == context.locale &&
+              baseline.context.theme == context.theme)) {
+        return baseline;
+      }
+    }
+    return null;
+  }
+
+  /// The node's approved semantic baseline matching the run's [captureContext]
+  /// (any when unset), or null. Mirrors [_approvedBaselineFor].
+  StructuralBaseline? _approvedStructuralFor(Node node) {
+    for (final baseline in node.payload.structuralBaselines) {
       if (baseline.state != BaselineState.approved) {
         continue;
       }

@@ -11,5 +11,9 @@ payload:
     - { action: tap, key: btn_logout, target: shop.dashboard }
   visual_baselines:
     - { capture: full_screen, state: approved, image: "sha256:46dde5eefd5eca879224938a16da1fd5ffc5ba86a6df2a2e389d9538ce45b574" }
+  structural_baselines:
+    - { state: approved, snapshot: "sha256:92ab704dbdff671f963c2903354fce392623dc18c3354ebd2c852a5bdca3a4c9" }
+  watch:
+    keys: [lbl_account_name, btn_view_orders]
   tags: [account, sanity]
   owner: team-account

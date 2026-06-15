@@ -3,6 +3,7 @@ import '../util/source_location.dart';
 import 'assertion.dart';
 import 'edge.dart';
 import 'flag_constraint.dart';
+import 'structural.dart';
 
 /// How the runner recognizes a node at runtime (ARCHITECTURE.md §4). Two nodes
 /// whose identities cannot both be ruled out by some observable state are
@@ -63,6 +64,8 @@ class NodePayload {
   const NodePayload({
     this.assertions = const [],
     this.visualBaselines = const [],
+    this.structuralBaselines = const [],
+    this.watch,
     this.edges = const [],
     this.guard,
     this.tags = const [],
@@ -71,6 +74,12 @@ class NodePayload {
 
   final List<Assertion> assertions;
   final List<VisualBaseline> visualBaselines;
+  final List<StructuralBaseline> structuralBaselines;
+
+  /// Opt-in semantic-tier (2.5) watch declaration; null ⇒ the tier is driven
+  /// solely by any [structuralBaselines] present.
+  final WatchSpec? watch;
+
   final List<Edge> edges;
   final Guard? guard;
   final List<String> tags;
@@ -84,6 +93,8 @@ class NodePayload {
       NodePayload(
         assertions: assertions ?? this.assertions,
         visualBaselines: visualBaselines,
+        structuralBaselines: structuralBaselines,
+        watch: watch,
         edges: edges ?? this.edges,
         guard: guard,
         tags: tags ?? this.tags,
@@ -93,6 +104,10 @@ class NodePayload {
   Map<String, Object?> toMap() => compactMap({
         'assertions': [for (final a in assertions) a.toMap()],
         'visual_baselines': [for (final b in visualBaselines) b.toMap()],
+        'structural_baselines': [
+          for (final b in structuralBaselines) b.toMap()
+        ],
+        'watch': watch?.toMap(),
         'edges': [for (final e in edges) e.toMap()],
         'guards': guard?.toMap(),
         'tags': tags,

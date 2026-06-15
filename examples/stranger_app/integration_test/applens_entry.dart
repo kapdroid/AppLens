@@ -2,6 +2,8 @@
 //
 // Runs headless under `flutter test integration_test/applens_entry.dart` and,
 // with `-d <device>`, on a real emulator — the same code, the Tier-0 contract.
+import 'dart:convert';
+
 import 'package:applens_core/applens_core.dart';
 import 'package:applens_runner/applens_runner.dart';
 import 'package:flutter/material.dart';
@@ -30,13 +32,24 @@ void main() {
     // Graph YAML loads as strings; goldens load as bytes — loadString on a PNG
     // would corrupt it, so the two are split here.
     final files = <String, String>{
-      for (final key in assets.where((a) => !a.startsWith('qa_graph/goldens/')))
+      for (final key in assets.where((a) =>
+          !a.startsWith('qa_graph/goldens/') &&
+          !a.startsWith('qa_graph/structural/')))
         key: await rootBundle.loadString(key),
     };
     final goldens = <String, Uint8List>{
       for (final key in assets.where((a) => a.startsWith('qa_graph/goldens/')))
         'sha256:${key.split('/').last.replaceAll('.png', '')}':
             (await rootBundle.load(key)).buffer.asUint8List(),
+    };
+    // Tier-2.5 semantic snapshots (text + geometry), bundled as JSON.
+    final structural = <String?, StructuralSnapshot>{
+      for (final key
+          in assets.where((a) => a.startsWith('qa_graph/structural/')))
+        'sha256:${key.split('/').last.replaceAll('.json', '')}':
+            StructuralSnapshot.fromMap(
+                jsonDecode(await rootBundle.loadString(key))
+                    as Map<String, Object?>),
     };
     final graph = loadGraph('qa_graph', files: MapGraphFiles(files));
     expect(
@@ -53,6 +66,8 @@ void main() {
       // Tier 3: compare tagged nodes against the bundled goldens. captureContext
       // is null so any approved baseline matches (single-profile v1).
       baselines: MapBaselineSource(goldens),
+      // Tier 2.5: diff watched widgets' text + geometry against the snapshots.
+      structuralBaselines: MapStructuralBaselineSource(structural),
     );
     final record = await orchestrator.run(graph, plan);
 

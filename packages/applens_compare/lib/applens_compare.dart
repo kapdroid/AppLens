@@ -5,6 +5,7 @@
 /// (docs/ARCHITECTURE.md §8).
 library;
 
+export 'src/annotate.dart';
 export 'src/comparator.dart';
 export 'src/golden_comparator.dart';
 export 'src/pixelmatch.dart';

@@ -37,3 +37,4 @@ flutter:
     - qa_graph/modules/support/support.module.yaml
     - qa_graph/modules/support/nodes/
     - qa_graph/goldens/
+    - qa_graph/structural/

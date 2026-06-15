@@ -37,6 +37,37 @@ List<AssertionResult> evaluateTier1(Node node, Fingerprint fingerprint) {
             detail: absent ? '' : 'key "$key" unexpectedly present',
           ),
         );
+      case 'text_equals':
+        final key = assertion.args['key'];
+        final expected = assertion.args['value'];
+        if (key is! String || expected is! String) {
+          results.add(AssertionResult(
+            tierOrder: tier1Order,
+            type: assertion.type,
+            passed: false,
+            detail: 'text_equals requires string "key" and "value" args',
+          ));
+          break;
+        }
+        if (!fingerprint.anchors.contains(key)) {
+          results.add(AssertionResult(
+            tierOrder: tier1Order,
+            type: assertion.type,
+            passed: false,
+            detail: 'key "$key" not present',
+          ));
+          break;
+        }
+        final actual = fingerprint.texts[key];
+        final match = actual == expected;
+        results.add(AssertionResult(
+          tierOrder: tier1Order,
+          type: assertion.type,
+          passed: match,
+          detail: match
+              ? ''
+              : 'expected "$expected" but got "${actual ?? '<no text>'}"',
+        ));
       default:
         results.add(
           AssertionResult(

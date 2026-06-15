@@ -57,10 +57,23 @@ class WidgetFingerprintSource implements FingerprintSource {
   Future<Fingerprint> capture() async {
     final tree = await driver.tree();
     final anchors = <String>{};
+    final texts = <String, String>{};
+
+    String? firstText(SerializedWidget node) {
+      if (node.text != null) return node.text;
+      for (final child in node.children) {
+        final t = firstText(child);
+        if (t != null) return t;
+      }
+      return null;
+    }
+
     void collect(SerializedWidget widget) {
       final key = widget.key;
       if (key != null) {
         anchors.add(key);
+        final t = firstText(widget);
+        if (t != null) texts[key] = t;
       }
       for (final child in widget.children) {
         collect(child);
@@ -68,6 +81,7 @@ class WidgetFingerprintSource implements FingerprintSource {
     }
 
     collect(tree.root);
-    return Fingerprint(route: observer.currentRoute, anchors: anchors);
+    return Fingerprint(
+        route: observer.currentRoute, anchors: anchors, texts: texts);
   }
 }
