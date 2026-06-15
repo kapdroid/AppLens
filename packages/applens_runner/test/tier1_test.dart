@@ -17,8 +17,16 @@ ${assertions.map((a) {
 
 Fingerprint _fp(
         {Set<String> anchors = const {},
-        Map<String, String> texts = const {}}) =>
-    Fingerprint(anchors: anchors, texts: texts);
+        Map<String, String> texts = const {},
+        Map<String, String> flags = const {}}) =>
+    Fingerprint(anchors: anchors, texts: texts, flags: flags);
+
+Node _guarded(List<String> requires) => parseNode('''
+identity:
+  route: /test
+payload:
+  guards: { requires: [${requires.join(', ')}] }
+''', source: 'test', assignedId: 'test');
 
 void main() {
   group('text_equals', () {
@@ -75,6 +83,43 @@ void main() {
       final results = evaluateTier1(node, fp);
       expect(results, hasLength(2));
       expect(results.every((r) => r.passed), isTrue);
+    });
+  });
+
+  group('evaluateGuard', () {
+    test('a node without a guard yields no result', () {
+      final node = _node([
+        {'type': 'widget_exists', 'key': 'btn'}
+      ]);
+      expect(evaluateGuard(node, _fp()), isNull);
+    });
+
+    test('passes when every required flag is truthy', () {
+      final node = _guarded(['journey.started']);
+      final r = evaluateGuard(node, _fp(flags: {'journey.started': 'true'}));
+      expect(r!.type, 'guard_satisfied');
+      expect(r.passed, isTrue);
+    });
+
+    test('fails and names the unmet precondition when a flag is absent', () {
+      final node = _guarded(['journey.started']);
+      final r = evaluateGuard(node, _fp())!;
+      expect(r.passed, isFalse);
+      expect(r.detail, contains('journey.started'));
+    });
+
+    test('false / 0 / empty are not truthy', () {
+      final node = _guarded(['a', 'b', 'c']);
+      final r =
+          evaluateGuard(node, _fp(flags: {'a': 'false', 'b': '0', 'c': ''}))!;
+      expect(r.passed, isFalse);
+      expect(r.detail, allOf(contains('a'), contains('b'), contains('c')));
+    });
+
+    test('a positive integer flag satisfies a require token', () {
+      final node = _guarded(['cart_count']);
+      expect(
+          evaluateGuard(node, _fp(flags: {'cart_count': '3'}))!.passed, isTrue);
     });
   });
 }

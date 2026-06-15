@@ -5,6 +5,38 @@ import 'fingerprint.dart';
 /// OracleTier order for the tier-1 (widget-tree) checks.
 const int tier1Order = 10;
 
+/// OracleTier order for guard (precondition) checks — the cheapest, evaluated
+/// first so an unmet precondition short-circuits the deeper oracles.
+const int guardOrder = 5;
+
+/// Whether a guard `requires` token is satisfied by an observed flag [value]:
+/// present and truthy (not `false`, `0`, or empty).
+bool _truthy(String? value) =>
+    value != null && value != 'false' && value != '0' && value.isNotEmpty;
+
+/// Evaluates a node's guard preconditions against the observed [fingerprint]
+/// flags (ARCHITECTURE.md §4): each `requires` token must name a flag that is
+/// present and truthy. Returns null when the node declares no guard, so a node
+/// without preconditions adds nothing. Reaching a node with an unmet guard is a
+/// real finding (the app let you somewhere its precondition forbids) — gated
+/// like any assertion, deterministic, no AI.
+AssertionResult? evaluateGuard(Node node, Fingerprint fingerprint) {
+  final guard = node.payload.guard;
+  if (guard == null || guard.requires.isEmpty) {
+    return null;
+  }
+  final unmet = [
+    for (final token in guard.requires)
+      if (!_truthy(fingerprint.flags[token])) token,
+  ];
+  return AssertionResult(
+    tierOrder: guardOrder,
+    type: 'guard_satisfied',
+    passed: unmet.isEmpty,
+    detail: unmet.isEmpty ? '' : 'unmet precondition(s): ${unmet.join(', ')}',
+  );
+}
+
 /// Evaluates a node's tier-1 assertions against an observed [fingerprint].
 ///
 /// v1 evaluates key-existence assertions (`widget_exists` / `widget_absent`)

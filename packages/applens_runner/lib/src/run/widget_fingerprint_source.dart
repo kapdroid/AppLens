@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../driver/driver.dart';
 import 'fingerprint.dart';
+import 'flag_source.dart';
 
 /// Tracks the current route for fingerprinting (ARCHITECTURE.md §7) by mirroring
 /// the navigator's route stack, so the route is correct after pop, replace, and
@@ -44,14 +45,21 @@ class AppLensNavigatorObserver extends NavigatorObserver {
 }
 
 /// Assembles a [Fingerprint] from the live app: the route from [observer], the
-/// present anchor keys from the driver's serialized tree. Flag-based identity
-/// (SDK introspection — applens_sdk) and overlay detection land with the SDK
-/// tier (ARCHITECTURE.md §10); v1 reads no flags and assumes no overlay.
+/// present anchor keys + their text from the driver's serialized tree, and the
+/// identity flags from [flags] — SDK introspection ([CallbackFlagSource] over
+/// `AppLensState`) when integrated, UI inference ([UiInferenceFlagSource])
+/// otherwise (ARCHITECTURE.md §7/§10). Overlay detection lands with the SDK
+/// tier; the default [EmptyFlagSource] preserves route + anchor-only identity.
 class WidgetFingerprintSource implements FingerprintSource {
-  WidgetFingerprintSource(this.driver, this.observer);
+  WidgetFingerprintSource(
+    this.driver,
+    this.observer, {
+    this.flags = const EmptyFlagSource(),
+  });
 
   final AppLensDriver driver;
   final AppLensNavigatorObserver observer;
+  final FlagSource flags;
 
   @override
   Future<Fingerprint> capture() async {
@@ -82,6 +90,10 @@ class WidgetFingerprintSource implements FingerprintSource {
 
     collect(tree.root);
     return Fingerprint(
-        route: observer.currentRoute, anchors: anchors, texts: texts);
+      route: observer.currentRoute,
+      anchors: anchors,
+      texts: texts,
+      flags: flags.read(tree),
+    );
   }
 }

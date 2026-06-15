@@ -23,6 +23,7 @@ dev_dependencies:
   applens_runner: any
   applens_crawler: any
   applens_cli: any
+  applens_sdk: any
 
 # The qa_graph is bundled as assets so on-device runs can load it (the host CLI
 # reads it from the filesystem instead).

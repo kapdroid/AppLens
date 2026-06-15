@@ -210,7 +210,13 @@ class Orchestrator {
     String matched,
   ) async {
     final node = graph.byId[expected]!;
-    final assertions = evaluateTier1(node, fingerprint);
+    // Guard preconditions first (cheapest): an unmet `requires` flag is a
+    // finding and, via the short-circuit below, stops the deeper oracles.
+    final guard = evaluateGuard(node, fingerprint);
+    final assertions = [
+      if (guard != null) guard,
+      ...evaluateTier1(node, fingerprint),
+    ];
     final extraArtifacts = <Artifact>[];
 
     // Cheap-to-expensive (ARCHITECTURE.md §8): descend a tier only when every

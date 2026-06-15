@@ -13,6 +13,7 @@ export 'src/visual/proposal_source.dart';
 // Runner loop: orchestrator + fingerprint seam. The pure run model, RunStore
 // seam, and SQLite store live in applens_core (shared by the CLI and report).
 export 'src/run/fingerprint.dart';
+export 'src/run/flag_source.dart';
 export 'src/run/orchestrator.dart';
 export 'src/run/semantic.dart';
 export 'src/run/structural_source.dart';

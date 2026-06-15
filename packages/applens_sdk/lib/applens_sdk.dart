@@ -1,10 +1,8 @@
-/// AppLens SDK: the optional in-app package — TestClock, the introspection
-/// service extension, and seed hooks — all compiled out of release builds. This
-/// is a stub until a later session; it ships only this documented placeholder
-/// so the workspace resolves and CI is green from the first commit.
+/// AppLens SDK: the optional in-app package for Tier-1 integration (§10) — the
+/// state registry the app uses to expose identity flags and guard preconditions
+/// to the runner, debug-only so it compiles out of release builds. Tier-0 (zero
+/// integration) needs none of this; the runner infers flags from the UI instead
+/// (`UiInferenceFlagSource`). TestClock and seed hooks layer on here later.
 library;
 
-/// Registers the in-app AppLens hooks (clock, introspection, seeds).
-Never registerApplensSdk() => throw UnimplementedError(
-      'applens_sdk is wired up in a later session (SDK integration tiers, §10).',
-    );
+export 'src/applens_state.dart';
