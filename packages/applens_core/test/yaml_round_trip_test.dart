@@ -74,6 +74,33 @@ void main() {
         throwsA(isA<GraphParseException>()));
   });
 
+  test('a swipe edge round-trips its direction', () {
+    const yaml = 'id: x\n'
+        'identity: { route: /x }\n'
+        'payload:\n'
+        '  edges:\n'
+        '    - { action: swipe, direction: left, key: pager, target: y }\n';
+    final node = parseNode(yaml, source: 'x.yaml');
+    final edge = node.payload.edges.single;
+    expect(edge.action, EdgeAction.swipe);
+    expect(edge.direction, SwipeDirection.left);
+    final twice = parseNode(writeYaml(node.toMap()), source: 'x.yaml');
+    expect(twice.payload.edges.single.direction, SwipeDirection.left);
+  });
+
+  test('an unknown swipe direction is a located parse error', () {
+    const bad = 'id: x\n'
+        'identity: { route: /x }\n'
+        'payload:\n'
+        '  edges:\n'
+        '    - { action: swipe, direction: sideways, target: y }\n';
+    expect(
+      () => parseNode(bad, source: 'bad.yaml'),
+      throwsA(isA<GraphParseException>()
+          .having((e) => e.message, 'message', contains('direction'))),
+    );
+  });
+
   test('a mistyped baseline state is a loud parse error, not silent coercion',
       () {
     const bad = 'id: x\n'

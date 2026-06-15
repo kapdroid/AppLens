@@ -1,5 +1,6 @@
 import 'dart:typed_data';
-import 'dart:ui';
+
+import 'package:applens_core/applens_core.dart' show SwipeDirection;
 
 import 'driver.dart';
 import 'selector_resolver.dart';
@@ -38,8 +39,9 @@ class FakeDriver implements AppLensDriver {
       actionLog.add('scrollTo ${describeSelector(selector)}');
 
   @override
-  Future<void> swipe(Offset from, Offset to) async =>
-      actionLog.add('swipe $from -> $to');
+  Future<void> swipe(SwipeDirection direction, {WidgetSelector? on}) async =>
+      actionLog.add(
+          'swipe ${direction.yaml}${on == null ? '' : ' on ${describeSelector(on)}'}');
 
   @override
   Future<void> back() async => actionLog.add('back');

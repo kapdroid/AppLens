@@ -156,7 +156,7 @@ payload:
   owner: team-checkout
 ```
 
-Edge actions in v1: tap, long_press, enter_text, scroll_to, swipe, back, deep_link, native (Patrol-mediated: permission dialogs, notifications). Each edge may carry its own preconditions and a settle policy.
+Edge actions in v1: tap, long_press, enter_text, scroll_to, swipe (carries a `direction:` — up/down/left/right — flung from the screen centre or a keyed widget), back, deep_link (delivered in-process via the navigation `pushRoute` message, so the app's own Router/Navigator routes it — no Patrol), and native (declared but **not driven** in v1: permission dialogs are eliminated by pre-granting from `applens.yaml`, not automated; Patrol-mediated dialogs/notifications are Phase 3). Each edge may carry its own preconditions and a settle policy.
 
 `applens validate` runs static analysis on the whole graph before any execution: schema validity; fingerprint ambiguity (two nodes whose identity sets are not mutually distinguishable — a hard error, the most important check in the system); reachability (every node reachable from declared entry nodes); orphan baselines; dangling edge targets; guard satisfiability. A graph that validates is guaranteed matchable at runtime.
 
@@ -237,7 +237,7 @@ abstract class AppLensDriver {
   Future<void> longPress(WidgetSelector s);
   Future<void> enterText(WidgetSelector s, String text);
   Future<void> scrollTo(WidgetSelector s);
-  Future<void> swipe(Offset from, Offset to);
+  Future<void> swipe(SwipeDirection direction, {WidgetSelector? on});
   Future<void> back();
   Future<void> openDeepLink(Uri uri);
   Future<WidgetTreeSnapshot> tree();          // serialized element tree

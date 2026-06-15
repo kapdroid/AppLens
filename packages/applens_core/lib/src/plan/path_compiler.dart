@@ -288,6 +288,7 @@ class _Hop {
         key: edge.key,
         text: edge.text,
         uri: edge.uri,
+        direction: edge.direction,
       );
 }
 

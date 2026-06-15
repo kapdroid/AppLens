@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:applens_core/applens_core.dart' show SwipeDirection;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -127,9 +128,35 @@ class AppLensWidgetDriver implements AppLensDriver {
   }
 
   @override
-  Future<void> swipe(Offset from, Offset to) async {
-    await tester.dragFrom(from, to - from);
-    await tester.pump();
+  Future<void> swipe(SwipeDirection direction, {WidgetSelector? on}) async {
+    // Centre on the target widget when named, else the screen centre. The drag
+    // distance is a fraction of the gesture's axis so it crosses a page/list
+    // boundary without flinging off-screen.
+    final ui.Size size =
+        tester.view.physicalSize / tester.view.devicePixelRatio;
+    final Offset start;
+    if (on != null) {
+      final finder = resolveSelector(on);
+      _ensureSingle(finder, on);
+      start = _guardSync(
+          'swipe ${describeSelector(on)}', () => tester.getCenter(finder));
+    } else {
+      start = Offset(size.width / 2, size.height / 2);
+    }
+    final dx = size.width * 0.4;
+    final dy = size.height * 0.4;
+    final delta = switch (direction) {
+      SwipeDirection.up => Offset(0, -dy),
+      SwipeDirection.down => Offset(0, dy),
+      SwipeDirection.left => Offset(-dx, 0),
+      SwipeDirection.right => Offset(dx, 0),
+    };
+    // A swipe is a *fling* (velocity-carrying), not a slow drag — so it crosses
+    // a PageView/Dismissible snap threshold rather than springing back.
+    await _guard('swipe ${direction.yaml}', () async {
+      await tester.flingFrom(start, delta, 800);
+      await tester.pumpAndSettle();
+    });
   }
 
   @override
@@ -146,13 +173,19 @@ class AppLensWidgetDriver implements AppLensDriver {
 
   @override
   Future<void> openDeepLink(Uri uri) async {
-    // Deep links arrive via the navigation platform channel and route through
-    // the app's Router. That wiring lands in a later session; the walking
-    // skeleton (and the stranger graph) use no deep_link edges.
-    throw UnimplementedError(
-      'openDeepLink() is not wired up yet: deep links route through the '
-      'navigation platform channel / Router (a later session).',
-    );
+    // Deliver the link the way the engine does — the `pushRoute` navigation
+    // message — so the app's own Router/Navigator handles it in-process (named
+    // routes, `onGenerateRoute`, or a `Router` backend all respond). This whole
+    // driver is test-harness code built on WidgetTester, so the `@visibleForTesting`
+    // `handlePushRoute` is the right (and only public) in-process entry point.
+    await _guard('openDeepLink $uri', () async {
+      // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+      final handled = await WidgetsBinding.instance.handlePushRoute('$uri');
+      if (!handled) {
+        throw DriverException('openDeepLink: app did not handle "$uri"');
+      }
+      await tester.pumpAndSettle();
+    });
   }
 
   @override

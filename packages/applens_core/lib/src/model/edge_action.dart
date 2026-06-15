@@ -25,3 +25,26 @@ enum EdgeAction {
     return null;
   }
 }
+
+/// The direction a `swipe` edge drags (ARCHITECTURE.md §4). Carried on the edge
+/// as `direction:`; the runner translates it into a screen- or widget-centred
+/// drag.
+enum SwipeDirection {
+  up('up'),
+  down('down'),
+  left('left'),
+  right('right');
+
+  const SwipeDirection(this.yaml);
+
+  final String yaml;
+
+  static SwipeDirection? fromYaml(String value) {
+    for (final direction in SwipeDirection.values) {
+      if (direction.yaml == value) {
+        return direction;
+      }
+    }
+    return null;
+  }
+}

@@ -11,6 +11,7 @@ class Edge {
     this.key,
     this.text,
     this.uri,
+    this.direction,
   });
 
   final EdgeAction action;
@@ -18,7 +19,8 @@ class Edge {
   /// The id of the node this edge leads to.
   final String target;
 
-  /// Widget key the action operates on (tap, long_press, enter_text, scroll_to).
+  /// Widget key the action operates on (tap, long_press, enter_text, scroll_to;
+  /// optional for swipe — the widget the drag is centred on).
   final String? key;
 
   /// Text to enter (enter_text only).
@@ -26,6 +28,9 @@ class Edge {
 
   /// Deep-link target (deep_link only).
   final String? uri;
+
+  /// Drag direction (swipe only).
+  final SwipeDirection? direction;
 
   /// Returns a copy with [target] replaced (used by the loader to resolve bare
   /// in-module targets to hierarchical ids).
@@ -35,6 +40,7 @@ class Edge {
         key: key,
         text: text,
         uri: uri,
+        direction: direction,
       );
 
   Map<String, Object?> toMap() => compactMap({
@@ -43,5 +49,6 @@ class Edge {
         'key': key,
         'text': text,
         'uri': uri,
+        'direction': direction?.yaml,
       });
 }

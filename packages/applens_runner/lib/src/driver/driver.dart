@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:applens_core/applens_core.dart' show SwipeDirection;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'applens_driver.dart';
@@ -43,8 +44,10 @@ abstract interface class AppLensDriver {
   /// scroll physics and nested scrollables.
   Future<void> scrollTo(WidgetSelector selector);
 
-  /// Drags from [from] to [to] in logical pixels.
-  Future<void> swipe(Offset from, Offset to);
+  /// Drags in [direction], centred on the widget matched by [on] when given, or
+  /// the screen centre otherwise. The runner computes the gesture from the live
+  /// geometry — swipe edges carry a direction, not raw coordinates.
+  Future<void> swipe(SwipeDirection direction, {WidgetSelector? on});
 
   /// Pops the current route (in-Flutter back).
   Future<void> back();

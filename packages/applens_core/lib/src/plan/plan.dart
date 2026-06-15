@@ -30,6 +30,7 @@ class PlanStep {
     this.key,
     this.text,
     this.uri,
+    this.direction,
   });
 
   final EdgeAction action;
@@ -40,12 +41,14 @@ class PlanStep {
   final String? key;
   final String? text;
   final String? uri;
+  final SwipeDirection? direction;
 
   Map<String, Object?> toMap() => compactMap({
         'action': action.yaml,
         'key': key,
         'text': text,
         'uri': uri,
+        'direction': direction?.yaml,
         'to': to,
       });
 }

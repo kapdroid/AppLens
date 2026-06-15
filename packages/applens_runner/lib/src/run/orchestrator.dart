@@ -504,20 +504,26 @@ class Orchestrator {
         case EdgeAction.deepLink:
           await driver.openDeepLink(Uri.parse(planStep.uri ?? ''));
         case EdgeAction.swipe:
-          throw UnimplementedError(
-            'swipe edges carry no coordinates in the model yet; '
-            'not used in v1 plans',
-          );
+          final direction = planStep.direction;
+          if (direction == null) {
+            throw DriverException(
+              'swipe step targeting "${planStep.to}" has no direction',
+            );
+          }
+          await driver.swipe(direction,
+              on: key == null ? null : KeySelector(key));
         case EdgeAction.native:
           await driver.native(const PermissionAction(''));
       }
     } on UnimplementedError {
-      // An action this v1 driver can't perform (swipe / deep_link / native) is
-      // an Error, not an Exception, so it would bypass the orchestrator's
-      // DriverException handling and abort the whole run. Surface it as a driver
-      // failure so the step is contained (failedHard + reroute) like any other.
+      // An action this v1 driver can't perform (native — permissions are
+      // pre-granted from applens.yaml, not driven) is an Error, not an
+      // Exception, so it would bypass the orchestrator's DriverException
+      // handling and abort the whole run. Surface it as a driver failure so the
+      // step is contained (failedHard + reroute) like any other.
       throw DriverException(
-        '${planStep.action.yaml} is not supported by the v1 driver',
+        '${planStep.action.yaml} is not supported by the v1 driver '
+        '(permissions are pre-granted from applens.yaml, not automated)',
       );
     }
   }

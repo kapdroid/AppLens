@@ -268,12 +268,25 @@ Edge _parseEdge(YamlMap map, String source) {
   if (action == null) {
     reader.fail('unknown edge action "$actionName"', map);
   }
+  final directionName = reader.optString('direction');
+  SwipeDirection? direction;
+  if (directionName != null) {
+    direction = SwipeDirection.fromYaml(directionName);
+    if (direction == null) {
+      reader.fail(
+        'unknown swipe direction "$directionName" (expected: '
+        '${SwipeDirection.values.map((d) => d.yaml).join(', ')})',
+        map.nodes['direction'] ?? map,
+      );
+    }
+  }
   return Edge(
     action: action,
     target: reader.requireString('target'),
     key: reader.optString('key'),
     text: reader.optString('text'),
     uri: reader.optString('uri'),
+    direction: direction,
   );
 }
 
