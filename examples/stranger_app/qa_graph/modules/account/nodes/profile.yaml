@@ -9,5 +9,7 @@ payload:
   edges:
     - { action: tap, key: btn_view_orders, target: orders }
     - { action: tap, key: btn_logout, target: shop.dashboard }
+  visual_baselines:
+    - { capture: full_screen, state: approved, image: "sha256:46dde5eefd5eca879224938a16da1fd5ffc5ba86a6df2a2e389d9538ce45b574" }
   tags: [account, sanity]
   owner: team-account

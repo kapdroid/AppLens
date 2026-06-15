@@ -8,4 +8,6 @@ payload:
   edges:
     - { action: tap, key: product_0, target: product }
     - { action: back, target: dashboard }
+  visual_baselines:
+    - { capture: full_screen, state: approved, image: "sha256:599bfb363e963bb5de7f08280d1ad45fbd4922717a3b0dadf59ff3ac522107d1" }
   tags: [shopping, sanity]

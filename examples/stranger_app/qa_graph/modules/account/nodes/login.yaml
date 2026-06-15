@@ -13,5 +13,7 @@ payload:
     - { action: enter_text, key: field_password, text: secret, target: login }
     - { action: tap, key: btn_login, target: profile }
     - { action: back, target: shop.dashboard }
+  visual_baselines:
+    - { capture: full_screen, state: approved, image: "sha256:50a8c25e8d083c96afac4a80d951d801014ac30a51eb23d27e7384f409f43c2a" }
   tags: [account]
   owner: team-account

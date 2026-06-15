@@ -13,5 +13,7 @@ payload:
     - { action: tap, key: btn_account, target: account.login }
     - { action: tap, key: btn_help, target: support.help }
     - { action: tap, key: btn_settings, target: support.settings }
+  visual_baselines:
+    - { capture: full_screen, state: approved, image: "sha256:a159ce44ae1316544f86344f0fb4eeb378c2915c5bada7db6fa6788d1d6a6381" }
   tags: [sanity]
   owner: team-shop

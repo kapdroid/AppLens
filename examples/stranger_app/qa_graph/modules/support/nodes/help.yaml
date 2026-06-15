@@ -9,5 +9,7 @@ payload:
   edges:
     - { action: tap, key: btn_open_settings, target: settings }
     - { action: back, target: shop.dashboard }
+  visual_baselines:
+    - { capture: full_screen, state: approved, image: "sha256:94e95ff29e6b75c169554b3dac4d0e911745d93315e3735c3c4e5f64d03c253e" }
   tags: [support, sanity]
   owner: team-support
