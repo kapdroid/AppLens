@@ -17,7 +17,7 @@ payload:
   visual_baselines:
     - { capture: full_screen, state: approved, image: "sha256:a159ce44ae1316544f86344f0fb4eeb378c2915c5bada7db6fa6788d1d6a6381" }
   structural_baselines:
-    - { state: approved, snapshot: "sha256:e486963da75d437297ec984abe77163d3985644454b60e434e720ff0ec097e0a" }
+    - { state: approved, snapshot: "sha256:c08ee4dd4baa9a458f10327f8a5cfff820da126c46323ddc2dcb9c2e2ba03c30" }
   watch:
     keys: [lbl_welcome, btn_start_shopping]
   tags: [sanity]

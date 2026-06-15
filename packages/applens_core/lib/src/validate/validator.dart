@@ -181,6 +181,35 @@ void _checkBaselines(Graph graph, List<Diagnostic> out) {
         );
       }
     }
+    // Semantic (tier-2.5) baselines get the same checks — without them, an
+    // approved baseline missing its snapshot, or a context typo, silently
+    // disables the tier on a green run (the class hardened for the visual tier).
+    for (final baseline in node.payload.structuralBaselines) {
+      final snapshot = baseline.snapshot;
+      if (snapshot == null || snapshot.isEmpty) {
+        out.add(
+          Diagnostic(
+            Severity.error,
+            'orphan_baseline',
+            'structural baseline on "${node.id}" has no snapshot reference',
+            location: node.source,
+          ),
+        );
+      }
+      final context = baseline.context;
+      if (context.device.isEmpty ||
+          context.locale.isEmpty ||
+          context.theme.isEmpty) {
+        out.add(
+          Diagnostic(
+            Severity.warning,
+            'incomplete_baseline_context',
+            'structural baseline on "${node.id}" is missing device/locale/theme',
+            location: node.source,
+          ),
+        );
+      }
+    }
     for (final assertion in node.payload.assertions) {
       if (assertion.type == 'layout_hash' &&
           !assertion.args.containsKey('baseline')) {

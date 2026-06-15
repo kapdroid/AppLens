@@ -116,6 +116,55 @@ void main() {
     expect(_codes(graph), contains('orphan_baseline'));
   });
 
+  test('a structural baseline without a snapshot is an orphan_baseline error',
+      () {
+    final graph = Graph(
+      nodes: [
+        Node(
+          id: 'a',
+          identity: const NodeIdentity(route: '/a'),
+          payload: const NodePayload(
+            structuralBaselines: [
+              StructuralBaseline(
+                context: BaselineContext(
+                    device: 'pixel6', locale: 'en', theme: 'light'),
+                state: BaselineState.approved,
+                // no snapshot → silently disables the tier if unvalidated
+              ),
+            ],
+          ),
+        ),
+      ],
+      entryNodeIds: ['a'],
+    );
+    expect(_codes(graph), contains('orphan_baseline'));
+    expect(validateGraph(graph).where((d) => d.isError), isNotEmpty);
+  });
+
+  test('a structural baseline missing context warns (not errors)', () {
+    final graph = Graph(
+      nodes: [
+        Node(
+          id: 'a',
+          identity: const NodeIdentity(route: '/a'),
+          payload: const NodePayload(
+            structuralBaselines: [
+              StructuralBaseline(
+                context: BaselineContext(device: '', locale: '', theme: ''),
+                state: BaselineState.approved,
+                snapshot: 'sha256:abc',
+              ),
+            ],
+          ),
+        ),
+      ],
+      entryNodeIds: ['a'],
+    );
+    expect(_codes(graph), contains('incomplete_baseline_context'));
+    // context-only is a warning, not an error.
+    expect(validateGraph(graph).where((d) => d.isError), isEmpty);
+  });
+
   test('a reachable, distinguishable graph validates clean', () {
     final graph = Graph(
       nodes: [

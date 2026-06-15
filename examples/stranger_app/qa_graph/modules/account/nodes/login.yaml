@@ -16,7 +16,7 @@ payload:
   visual_baselines:
     - { capture: full_screen, state: approved, image: "sha256:50a8c25e8d083c96afac4a80d951d801014ac30a51eb23d27e7384f409f43c2a" }
   structural_baselines:
-    - { state: approved, snapshot: "sha256:2329bb233bbad068cf19b627d371683942af198d32629cf6133a792402de2878" }
+    - { state: approved, snapshot: "sha256:c375cee7fc84458727b85f1ff292cbf47cbe131480af5f5903d3846e863f440c" }
   watch:
     keys: [btn_login]
   tags: [account]

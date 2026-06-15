@@ -11,7 +11,7 @@ payload:
   visual_baselines:
     - { capture: full_screen, state: approved, image: "sha256:599bfb363e963bb5de7f08280d1ad45fbd4922717a3b0dadf59ff3ac522107d1" }
   structural_baselines:
-    - { state: approved, snapshot: "sha256:a5de650eb2f537e08fafc973f94eafc7b1edfd0617b6e97bffef153279a614f9" }
+    - { state: approved, snapshot: "sha256:b29d30ae21c46b82a6a7f93c774209114a008b6fa0bd3f077b47ebf101860053" }
   watch:
     keys: [list_catalog]
   tags: [shopping, sanity]

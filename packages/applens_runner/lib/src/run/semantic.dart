@@ -73,12 +73,22 @@ StructuralSnapshot captureStructural(WidgetTreeSnapshot tree) {
   // The normalization frame is the largest-area box in the tree — the
   // screen-filling container. The tree's actual root is a RenderView (not a
   // RenderBox, so it has no rect), and the largest box is stable when a single
-  // widget's text or position changes, unlike a content bounding-box union.
+  // widget's text or position changes, unlike a content bounding-box union. An
+  // area tie is broken by origin (topmost, then leftmost) so the frame is
+  // independent of traversal order — two same-area boxes must not let a layout
+  // reorder shift every widget's normalization (a determinism hole).
   Rect? frame;
+  bool betterFrame(Rect r, Rect cur) {
+    final ra = r.width * r.height;
+    final ca = cur.width * cur.height;
+    if (ra != ca) return ra > ca;
+    if (r.top != cur.top) return r.top < cur.top;
+    return r.left < cur.left;
+  }
+
   void findFrame(SerializedWidget n) {
     final r = n.rect;
-    if (r != null &&
-        (frame == null || r.width * r.height > frame!.width * frame!.height)) {
+    if (r != null && (frame == null || betterFrame(r, frame!))) {
       frame = r;
     }
     for (final c in n.children) {
@@ -99,13 +109,26 @@ StructuralSnapshot captureStructural(WidgetTreeSnapshot tree) {
         r.height / root.height,
       );
 
-  String? firstText(SerializedWidget n) {
-    if (n.text != null) return n.text;
-    for (final c in n.children) {
-      final t = firstText(c);
-      if (t != null) return t;
+  // A keyed widget records *all* its Text descendants joined, not just the
+  // first — otherwise a change in a second text inside a keyed container (e.g. a
+  // price under a title) is silently lost, since the inner Text is suppressed as
+  // a separate entry. Returns null when the subtree has no text.
+  String? subtreeText(SerializedWidget n) {
+    final parts = <String>[];
+    void walk(SerializedWidget w) {
+      if (w.text != null) {
+        // Take this visible string and stop: its render subtree (e.g. the
+        // RichText a Text builds) repeats it, which would double-count.
+        parts.add(w.text!);
+        return;
+      }
+      for (final c in w.children) {
+        walk(c);
+      }
     }
-    return null;
+
+    walk(n);
+    return parts.isEmpty ? null : parts.join(' ');
   }
 
   // A keyed widget or a Text is usually a composite whose own element carries no
@@ -127,7 +150,7 @@ StructuralSnapshot captureStructural(WidgetTreeSnapshot tree) {
         widgets.add(WidgetSnapshot(
           type: node.type,
           key: node.key,
-          text: firstText(node),
+          text: subtreeText(node),
           bounds: norm(bounds),
         ));
       }
@@ -212,12 +235,17 @@ WidgetMatch matchWidgets(
     currLeft[j] = null;
   }
 
-  // Rung 2: by unique (type, text) among the unmatched (text must be present).
-  int? soleIndexWithSig(List<WidgetSnapshot?> list, String type, String text) {
+  // Rung 2: by unique (type, text) among the still-unmatched *unkeyed* widgets
+  // only (text must be present). A widget that carries a key is identified by
+  // its key alone — if rung 1 left it unmatched (its key is absent or ambiguous
+  // on the other side) it is genuinely removed/added, and must NOT be rescued by
+  // a text match to a *differently*-keyed widget.
+  int? soleUnkeyedWithSig(
+      List<WidgetSnapshot?> list, String type, String text) {
     int? found;
     for (var i = 0; i < list.length; i++) {
       final w = list[i];
-      if (w != null && w.type == type && w.text == text) {
+      if (w != null && w.key == null && w.type == type && w.text == text) {
         if (found != null) return null;
         found = i;
       }
@@ -228,9 +256,9 @@ WidgetMatch matchWidgets(
   for (var i = 0; i < baseLeft.length; i++) {
     final b = baseLeft[i];
     final text = b?.text;
-    if (b == null || text == null) continue;
-    if (soleIndexWithSig(baseLeft, b.type, text) != i) continue;
-    final j = soleIndexWithSig(currLeft, b.type, text);
+    if (b == null || b.key != null || text == null) continue;
+    if (soleUnkeyedWithSig(baseLeft, b.type, text) != i) continue;
+    final j = soleUnkeyedWithSig(currLeft, b.type, text);
     if (j == null) continue;
     pairs.add((b, currLeft[j]!));
     baseLeft[i] = null;

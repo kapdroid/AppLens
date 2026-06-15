@@ -58,12 +58,36 @@ void main() {
       expect(m.added, hasLength(2));
     });
 
-    test('a removed key is reported, not mispaired by text', () {
+    test('a removed key is reported, not mispaired by text to a different key',
+        () {
       final base = [_w('Text', key: 'gone', text: 'X')];
       final curr = [_w('Text', key: 'other', text: 'X')];
       final m = matchWidgets(base, curr);
-      // keys differ; rung-2 then pairs them by unique (Text,'X')
-      expect(m.pairs, hasLength(1));
+      // Both are keyed; rung-2 is unkeyed-only, so they are NOT text-paired —
+      // 'gone' is genuinely removed and 'other' genuinely added.
+      expect(m.pairs, isEmpty);
+      expect(m.removed.single.key, 'gone');
+      expect(m.added.single.key, 'other');
+    });
+
+    test('an ambiguous/absent key never leaks into a text mispairing (H1)', () {
+      // key 'a' was renamed to a *duplicate* 'b'; 'b' is ambiguous on curr.
+      final base = [
+        _w('Text', key: 'a', text: 'X'),
+        _w('Text', key: 'b', text: 'Y'),
+      ];
+      final curr = [
+        _w('Text', key: 'b', text: 'X'),
+        _w('Text', key: 'b', text: 'Y'),
+      ];
+      final m = matchWidgets(base, curr);
+      // No pair may join two *differently-keyed* widgets: 'a' must not be
+      // text-matched to a 'b'. 'a' is removed; the curr 'b's are added/ambiguous.
+      for (final (b, c) in m.pairs) {
+        expect(b.key == null || c.key == null || b.key == c.key, isTrue,
+            reason: 'a keyed widget was paired across different keys');
+      }
+      expect(m.removed.any((w) => w.key == 'a'), isTrue);
     });
   });
 
@@ -209,6 +233,70 @@ void main() {
       expect(b.left, closeTo(40 / 400, 0.01));
       expect(b.top, closeTo(80 / 800, 0.01));
       expect(b.width, closeTo(200 / 400, 0.01));
+    });
+
+    test(
+        'a keyed widget folds ALL its Text descendants, not just the first (L2)',
+        () {
+      // A keyed card with a title and a price: a change in the *price* (the
+      // second Text) must surface, not be masked by the unchanged title.
+      WidgetTreeSnapshot card(String price) => WidgetTreeSnapshot(
+            SerializedWidget(type: 'View', children: [
+              SerializedWidget(
+                type: 'Frame',
+                rect: const Rect.fromLTWH(0, 0, 100, 100),
+                children: [
+                  SerializedWidget(
+                      type: 'Column',
+                      key: 'card',
+                      rect: const Rect.fromLTWH(0, 0, 100, 40),
+                      children: [
+                        SerializedWidget(
+                            type: 'Text',
+                            text: 'Title',
+                            rect: const Rect.fromLTWH(0, 0, 50, 10)),
+                        SerializedWidget(
+                            type: 'Text',
+                            text: price,
+                            rect: const Rect.fromLTWH(0, 20, 50, 10)),
+                      ]),
+                ],
+              ),
+            ]),
+          );
+      final base = captureStructural(card('₹100'));
+      final live = captureStructural(card('₹200'));
+      expect(
+          base.widgets.firstWhere((w) => w.key == 'card').text, 'Title ₹100');
+      final findings = diffStructural(matchWidgets(base.widgets, live.widgets));
+      expect(findings.where((f) => f.kind == FindingKind.textChanged),
+          hasLength(1),
+          reason: 'the price change inside the keyed card must be detected');
+    });
+
+    test('the normalization frame is independent of traversal order (H3)', () {
+      // Two same-area candidate frames with different origins; the chosen frame
+      // must be the same (topmost-leftmost) regardless of child order, so a
+      // keyed widget normalizes identically — no spurious "moved" from a reorder.
+      SerializedWidget boxA() => SerializedWidget(
+          type: 'A', rect: const Rect.fromLTWH(0, 0, 100, 100));
+      SerializedWidget boxB() => SerializedWidget(
+          type: 'B', rect: const Rect.fromLTWH(5, 5, 100, 100));
+      SerializedWidget probe() => SerializedWidget(
+          type: 'Text',
+          key: 'p',
+          text: 'x',
+          rect: const Rect.fromLTWH(10, 10, 20, 20));
+      final ab = captureStructural(WidgetTreeSnapshot(
+          SerializedWidget(type: 'View', children: [boxA(), boxB(), probe()])));
+      final ba = captureStructural(WidgetTreeSnapshot(
+          SerializedWidget(type: 'View', children: [boxB(), boxA(), probe()])));
+      final pAB = ab.widgets.firstWhere((w) => w.key == 'p').bounds;
+      final pBA = ba.widgets.firstWhere((w) => w.key == 'p').bounds;
+      expect(pAB.left, pBA.left);
+      expect(pAB.top, pBA.top);
+      // Frame is boxA (top 0 < 5): probe at (10,10) → 0.10, not 0.05.
+      expect(pAB.left, closeTo(0.10, 0.001));
     });
   });
 }
