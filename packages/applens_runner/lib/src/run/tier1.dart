@@ -10,9 +10,17 @@ const int tier1Order = 10;
 const int guardOrder = 5;
 
 /// Whether a guard `requires` token is satisfied by an observed flag [value]:
-/// present and truthy (not `false`, `0`, or empty).
-bool _truthy(String? value) =>
-    value != null && value != 'false' && value != '0' && value.isNotEmpty;
+/// present and truthy. Falsey = absent, empty, `false` (any case), or a numeric
+/// zero (`0`, `0.0`, `-0`) — so a guard isn't silently satisfied by a `'False'`
+/// or `'0.0'` spelling. A non-zero number (including negative) and any other
+/// non-empty literal are truthy.
+bool _truthy(String? value) {
+  if (value == null || value.isEmpty || value.toLowerCase() == 'false') {
+    return false;
+  }
+  final number = num.tryParse(value);
+  return number == null || number != 0;
+}
 
 /// Evaluates a node's guard preconditions against the observed [fingerprint]
 /// flags (ARCHITECTURE.md §4): each `requires` token must name a flag that is

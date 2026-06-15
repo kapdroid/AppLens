@@ -116,6 +116,15 @@ void main() {
       expect(r.detail, allOf(contains('a'), contains('b'), contains('c')));
     });
 
+    test('falsey spellings (False, 0.0) are not truthy; -1 is', () {
+      final node = _guarded(['cap', 'zero', 'neg']);
+      final r = evaluateGuard(
+          node, _fp(flags: {'cap': 'False', 'zero': '0.0', 'neg': '-1'}))!;
+      expect(r.passed, isFalse); // cap + zero are unmet
+      expect(r.detail, allOf(contains('cap'), contains('zero')));
+      expect(r.detail, isNot(contains('neg'))); // -1 is non-zero → truthy
+    });
+
     test('a positive integer flag satisfies a require token', () {
       final node = _guarded(['cart_count']);
       expect(

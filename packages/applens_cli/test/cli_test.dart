@@ -168,6 +168,43 @@ void main() {
       expect(code, 1);
       expect(output, contains('no drift to approve'));
     });
+
+    test('swaps only ONE occurrence of a shared hash (replaceFirst)', () async {
+      // Two baseline lines share the same golden hash (a duplicated-context /
+      // audit case). approve must rewrite only the first, not both.
+      final dash = File('$graphDir/modules/shop/nodes/dashboard.yaml');
+      final lines = dash.readAsStringSync().split('\n');
+      final i = lines.indexWhere((l) => l.contains('capture: full_screen'));
+      lines.insert(i + 1, lines[i]); // duplicate the approved visual baseline
+      dash.writeAsStringSync(lines.join('\n'));
+      final oldRef = RegExp(r'sha256:[0-9a-f]+')
+          .firstMatch(dash.readAsStringSync())!
+          .group(0)!;
+      final newRef = 'sha256:${'d' * 64}';
+      final runPath = runJsonWith(Artifact(
+          kind: 'capture',
+          description: newRef,
+          bytes: Uint8List.fromList([9])));
+
+      final (code, _) = await _run(
+          ['approve', graphDir, runPath, '--node', 'shop.dashboard']);
+      expect(code, 0);
+      final after = dash.readAsStringSync();
+      expect(newRef.allMatches(after).length, 1, reason: 'only one swapped');
+      expect(oldRef.allMatches(after).length, 1, reason: 'the sibling is kept');
+    });
+
+    test('a malformed (non-sha256) artifact description fails cleanly',
+        () async {
+      final runPath = runJsonWith(Artifact(
+          kind: 'capture',
+          description: 'not-a-hash',
+          bytes: Uint8List.fromList([1])));
+      final (code, output) = await _run(
+          ['approve', graphDir, runPath, '--node', 'shop.dashboard']);
+      expect(code, 1);
+      expect(output, contains('no sha256 reference'));
+    });
   });
 
   test('graph stats reports counts and the module', () async {

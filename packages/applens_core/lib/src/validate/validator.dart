@@ -1,3 +1,4 @@
+import '../model/edge_action.dart';
 import '../model/graph.dart';
 import '../model/node.dart';
 import 'diagnostic.dart';
@@ -13,6 +14,7 @@ List<Diagnostic> validateGraph(Graph graph) {
   final diagnostics = <Diagnostic>[];
   _checkDuplicateIds(graph, diagnostics);
   _checkDanglingEdges(graph, diagnostics);
+  _checkEdgeOperands(graph, diagnostics);
   _checkReachability(graph, diagnostics);
   _checkAmbiguity(graph, diagnostics);
   _checkBaselines(graph, diagnostics);
@@ -52,6 +54,33 @@ void _checkDanglingEdges(Graph graph, List<Diagnostic> out) {
             location: node.source,
           ),
         );
+      }
+    }
+  }
+}
+
+/// Action operands a `swipe`/`deep_link` edge needs to be executable — caught
+/// at author time, not as a runtime failedHard (a `deep_link` with no `uri`
+/// silently navigates home; a `swipe` with no `direction` cannot run).
+void _checkEdgeOperands(Graph graph, List<Diagnostic> out) {
+  for (final node in graph.nodes) {
+    for (final edge in node.payload.edges) {
+      if (edge.action == EdgeAction.swipe && edge.direction == null) {
+        out.add(Diagnostic(
+          Severity.error,
+          'swipe_without_direction',
+          'swipe edge from "${node.id}" has no direction',
+          location: node.source,
+        ));
+      }
+      if (edge.action == EdgeAction.deepLink &&
+          (edge.uri == null || edge.uri!.isEmpty)) {
+        out.add(Diagnostic(
+          Severity.error,
+          'deep_link_without_uri',
+          'deep_link edge from "${node.id}" has no uri',
+          location: node.source,
+        ));
       }
     }
   }

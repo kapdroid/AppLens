@@ -357,17 +357,23 @@ class _ApproveCommand extends _Base {
       out.writeln('no node "$nodeId" with a source file in the graph');
       return 1;
     }
-    // The drift evidence for the node — a tier-3 'capture' (new golden) and/or a
-    // tier-2.5 'structural' (new snapshot), recorded content-addressed.
-    final artifacts = [
-      for (final visit in record.visits)
-        if (visit.expectedNodeId == nodeId)
-          for (final a in visit.artifacts)
-            if ((a.kind == 'capture' || a.kind == 'structural') &&
-                a.bytes != null)
-              a,
-    ];
-    if (artifacts.isEmpty) {
+    // The node's drift evidence — at most one tier-3 'capture' (new golden) and
+    // one tier-2.5 'structural' (new snapshot). First-reach only is enforced by
+    // the orchestrator, but a node reached as the target of two paths can record
+    // two; take the first of each kind so we never write an orphaned golden.
+    Artifact? firstOfKind(String kind) {
+      for (final visit in record.visits) {
+        if (visit.expectedNodeId != nodeId) continue;
+        for (final a in visit.artifacts) {
+          if (a.kind == kind && a.bytes != null) return a;
+        }
+      }
+      return null;
+    }
+
+    final capture = firstOfKind('capture');
+    final structural = firstOfKind('structural');
+    if (capture == null && structural == null) {
       out.writeln('no drift to approve for "$nodeId" in ${rest[1]}');
       return 1;
     }
@@ -376,33 +382,47 @@ class _ApproveCommand extends _Base {
     final file = File(node.source!.source);
     var yaml = file.readAsStringSync();
     final changes = <String>[];
-    for (final artifact in artifacts) {
-      final newRef = artifact.description; // sha256:<hex>
-      final hex = newRef.substring('sha256:'.length);
-      if (artifact.kind == 'capture') {
-        final old = _approvedImage(node);
-        if (old == null) {
-          out.writeln('"$nodeId" has no approved visual baseline to update');
-          return 1;
-        }
-        File('$dir/goldens/$hex.png')
-          ..parent.createSync(recursive: true)
-          ..writeAsBytesSync(artifact.bytes!);
-        yaml = yaml.replaceAll(old, newRef);
-        changes.add('golden $old → $newRef');
-      } else {
-        final old = _approvedSnapshot(node);
-        if (old == null) {
-          out.writeln(
-              '"$nodeId" has no approved structural baseline to update');
-          return 1;
-        }
-        File('$dir/structural/$hex.json')
-          ..parent.createSync(recursive: true)
-          ..writeAsBytesSync(artifact.bytes!);
-        yaml = yaml.replaceAll(old, newRef);
-        changes.add('snapshot $old → $newRef');
+
+    String? hexOf(Artifact a) {
+      // Trust the description only when it is the content-address form; a
+      // malformed run.json must fail cleanly, not crash on substring.
+      if (!a.description.startsWith('sha256:')) {
+        out.writeln('artifact for "$nodeId" has no sha256 reference '
+            '("${a.description}") — not a valid AppLens run');
+        return null;
       }
+      return a.description.substring('sha256:'.length);
+    }
+
+    if (capture != null) {
+      final old = _approvedImage(node);
+      final hex = hexOf(capture);
+      if (old == null) {
+        out.writeln('"$nodeId" has no approved visual baseline to update');
+        return 1;
+      }
+      if (hex == null) return 1;
+      File('$dir/goldens/$hex.png')
+        ..parent.createSync(recursive: true)
+        ..writeAsBytesSync(capture.bytes!);
+      // replaceFirst (not All): swap only this baseline's ref, never a shared
+      // sibling context or a `replaced:` audit field that holds the same hash.
+      yaml = yaml.replaceFirst(old, capture.description);
+      changes.add('golden $old → ${capture.description}');
+    }
+    if (structural != null) {
+      final old = _approvedSnapshot(node);
+      final hex = hexOf(structural);
+      if (old == null) {
+        out.writeln('"$nodeId" has no approved structural baseline to update');
+        return 1;
+      }
+      if (hex == null) return 1;
+      File('$dir/structural/$hex.json')
+        ..parent.createSync(recursive: true)
+        ..writeAsBytesSync(structural.bytes!);
+      yaml = yaml.replaceFirst(old, structural.description);
+      changes.add('snapshot $old → ${structural.description}');
     }
     file.writeAsStringSync(yaml);
     out

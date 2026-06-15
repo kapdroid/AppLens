@@ -179,4 +179,44 @@ void main() {
     );
     expect(validateGraph(graph).where((d) => d.isError), isEmpty);
   });
+
+  test('a swipe edge without a direction is an error', () {
+    final graph = Graph(
+      nodes: [
+        _node('a',
+            route: '/a',
+            edges: [const Edge(action: EdgeAction.swipe, target: 'b')]),
+        _node('b', route: '/b'),
+      ],
+      entryNodeIds: ['a'],
+    );
+    expect(_codes(graph), contains('swipe_without_direction'));
+    // a swipe WITH a direction validates clean.
+    final ok = Graph(
+      nodes: [
+        _node('a', route: '/a', edges: [
+          const Edge(
+              action: EdgeAction.swipe,
+              target: 'b',
+              direction: SwipeDirection.left),
+        ]),
+        _node('b', route: '/b'),
+      ],
+      entryNodeIds: ['a'],
+    );
+    expect(_codes(ok), isNot(contains('swipe_without_direction')));
+  });
+
+  test('a deep_link edge without a uri is an error', () {
+    final graph = Graph(
+      nodes: [
+        _node('a',
+            route: '/a',
+            edges: [const Edge(action: EdgeAction.deepLink, target: 'b')]),
+        _node('b', route: '/b'),
+      ],
+      entryNodeIds: ['a'],
+    );
+    expect(_codes(graph), contains('deep_link_without_uri'));
+  });
 }

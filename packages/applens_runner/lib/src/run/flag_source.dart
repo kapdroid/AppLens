@@ -43,6 +43,8 @@ sealed class FlagProbe {
 
 /// Counts the keys whose name starts with [prefix] — e.g. `cart_item_` → the
 /// cart size, surfaced as the integer flag value an `IntRangeConstraint` reads.
+/// The prefix must be unique to the counted items: a sibling key that shares it
+/// (e.g. `cart_item_total`) is counted too, so pick a prefix nothing else uses.
 class CountProbe extends FlagProbe {
   const CountProbe(super.flag, this.prefix);
 

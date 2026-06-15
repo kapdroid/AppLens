@@ -140,6 +140,16 @@ class AppLensWidgetDriver implements AppLensDriver {
       _ensureSingle(finder, on);
       start = _guardSync(
           'swipe ${describeSelector(on)}', () => tester.getCenter(finder));
+      // A widget scrolled out of the viewport still has a center — off-screen —
+      // and a fling from there is a silent no-op. Refuse it, like tap refuses an
+      // unhittable target, rather than pretend the swipe happened.
+      if (start.dx < 0 ||
+          start.dy < 0 ||
+          start.dx > size.width ||
+          start.dy > size.height) {
+        throw DriverException(
+            'swipe ${describeSelector(on)}: target center $start is off-screen');
+      }
     } else {
       start = Offset(size.width / 2, size.height / 2);
     }
@@ -174,10 +184,14 @@ class AppLensWidgetDriver implements AppLensDriver {
   @override
   Future<void> openDeepLink(Uri uri) async {
     // Deliver the link the way the engine does — the `pushRoute` navigation
-    // message — so the app's own Router/Navigator handles it in-process (named
-    // routes, `onGenerateRoute`, or a `Router` backend all respond). This whole
-    // driver is test-harness code built on WidgetTester, so the `@visibleForTesting`
+    // message — so the app's own Router/Navigator handles it in-process. This
+    // driver is test-harness code on WidgetTester, so the `@visibleForTesting`
     // `handlePushRoute` is the right (and only public) in-process entry point.
+    // Caveat: a classic `routes:`/`onGenerateRoute` app routes on `uri.path`
+    // only (scheme/host dropped) and `handlePushRoute` returns true even for an
+    // unresolved route — so `handled` is reliable only for a `Router` backend.
+    // The real safety net is the orchestrator re-fingerprinting after: a link
+    // that didn't land where expected is a node mismatch, not a false pass.
     await _guard('openDeepLink $uri', () async {
       // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
       final handled = await WidgetsBinding.instance.handlePushRoute('$uri');

@@ -221,7 +221,7 @@ void main() {
     expect(record.visits[1].outcome, NodeOutcome.failedHard);
   });
 
-  test('an unsupported action (swipe) fails the node, not the whole run',
+  test('a swipe step with no direction fails the node, not the whole run',
       () async {
     final plan = _plan([
       PlanPath(
@@ -229,8 +229,9 @@ void main() {
         steps: [const PlanStep(action: EdgeAction.swipe, to: 'B', key: 'k')],
       ),
     ]);
-    // _act throws UnimplementedError for swipe — an Error that would bypass the
-    // DriverException handling and abort the run. It must be contained to B.
+    // A swipe step carrying no direction is a DriverException in _act (the
+    // validator now rejects such edges at author time); it must be contained
+    // to B, not abort the run.
     final record =
         await _orchestrator(FakeDriver(), [_fpA, _fpBpass]).run(_graph, plan);
 

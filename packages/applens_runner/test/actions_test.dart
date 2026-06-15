@@ -64,6 +64,25 @@ void main() {
       expect(controller.page?.round(), 1,
           reason: 'advanced to the second page');
     });
+
+    testWidgets('swipe on: an off-screen widget is refused, not a silent no-op',
+        (tester) async {
+      await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(
+          body: Stack(children: [
+            Positioned(
+                left: 2000,
+                top: 10,
+                child: SizedBox(key: Key('off'), width: 20, height: 20)),
+          ]),
+        ),
+      ));
+      final driver = AppLensWidgetDriver(tester);
+      await expectLater(
+        driver.swipe(SwipeDirection.left, on: const KeySelector('off')),
+        throwsA(isA<DriverException>()),
+      );
+    });
   });
 
   group('FakeDriver', () {
