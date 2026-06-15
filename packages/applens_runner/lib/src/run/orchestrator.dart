@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:applens_compare/applens_compare.dart';
 import 'package:applens_core/applens_core.dart';
 
@@ -254,6 +256,14 @@ class Orchestrator {
             );
             assertions.add(semanticResult(findings));
             if (findings.isNotEmpty) {
+              // The drifted snapshot itself, content-addressed — the would-be
+              // baseline `applens approve` promotes if the change is intended
+              // (mirrors the tier-3 'capture' artifact).
+              extraArtifacts.add(Artifact(
+                kind: 'structural',
+                description: live.key,
+                bytes: utf8.encode(jsonEncode(live.toMap())),
+              ));
               try {
                 final capture = await driver.capture(const FullScreenScope());
                 extraArtifacts.add(Artifact(

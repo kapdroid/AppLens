@@ -31,6 +31,20 @@ Future<(int, String)> _run(List<String> args) async {
   return (code, out.toString());
 }
 
+void _copyDir(Directory src, Directory dst) {
+  dst.createSync(recursive: true);
+  for (final entity in src.listSync(recursive: true)) {
+    final rel = entity.path.substring(src.path.length + 1);
+    if (entity is Directory) {
+      Directory('${dst.path}/$rel').createSync(recursive: true);
+    } else if (entity is File) {
+      File('${dst.path}/$rel')
+        ..parent.createSync(recursive: true)
+        ..writeAsBytesSync(entity.readAsBytesSync());
+    }
+  }
+}
+
 void main() {
   test('validate accepts the stranger graph', () async {
     final (code, output) = await _run(['validate', _qaGraph]);
@@ -65,6 +79,95 @@ void main() {
     final (code, output) = await _run(['plan', _qaGraph, '--strategy', 'soak']);
     expect(code, 0);
     expect(output, contains('strategy: "soak"'));
+  });
+
+  group('approve', () {
+    late Directory tmp;
+    late String graphDir;
+    setUp(() {
+      tmp = Directory.systemTemp.createTempSync('applens_approve');
+      graphDir = '${tmp.path}/qa_graph';
+      _copyDir(Directory(_qaGraph), Directory(graphDir));
+    });
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    String runJsonWith(Artifact artifact) {
+      final run = RunRecord(
+        id: 'run',
+        strategy: 'smoke',
+        graphHash: 'h',
+        seed: 0,
+        visits: [
+          NodeVisit(
+            step: 0,
+            expectedNodeId: 'shop.dashboard',
+            matchedNodeId: 'shop.dashboard',
+            outcome: NodeOutcome.failedSoft,
+            assertions: const [
+              AssertionResult(
+                  tierOrder: 30, type: 'visual_match', passed: false)
+            ],
+            artifacts: [artifact],
+          ),
+        ],
+      );
+      final path = '${tmp.path}/run.json';
+      File(path).writeAsStringSync(jsonEncode(run.toMap()));
+      return path;
+    }
+
+    test('promotes a tier-3 drift into the node golden + swaps the YAML',
+        () async {
+      final dash = File('$graphDir/modules/shop/nodes/dashboard.yaml');
+      final oldRef = RegExp(r'sha256:[0-9a-f]+')
+          .firstMatch(dash.readAsStringSync())!
+          .group(0)!;
+      final newRef = 'sha256:${'a' * 64}';
+      final bytes = Uint8List.fromList([1, 2, 3, 4]);
+      final runPath = runJsonWith(
+          Artifact(kind: 'capture', description: newRef, bytes: bytes));
+
+      final (code, output) = await _run(
+          ['approve', graphDir, runPath, '--node', 'shop.dashboard']);
+      expect(code, 0);
+      expect(output, contains('approved'));
+      expect(
+          File('$graphDir/goldens/${'a' * 64}.png').readAsBytesSync(), bytes);
+      final after = dash.readAsStringSync();
+      expect(after, contains(newRef));
+      expect(after, isNot(contains(oldRef)));
+    });
+
+    test('promotes a tier-2.5 drift into the node snapshot', () async {
+      final dash = File('$graphDir/modules/shop/nodes/dashboard.yaml');
+      final oldSnap = dash
+          .readAsStringSync()
+          .split('\n')
+          .firstWhere((l) => l.contains('snapshot:'));
+      final newRef = 'sha256:${'b' * 64}';
+      final runPath = runJsonWith(Artifact(
+          kind: 'structural',
+          description: newRef,
+          bytes: Uint8List.fromList('{"widgets":[]}'.codeUnits)));
+
+      final (code, _) = await _run(
+          ['approve', graphDir, runPath, '--node', 'shop.dashboard']);
+      expect(code, 0);
+      expect(
+          File('$graphDir/structural/${'b' * 64}.json').existsSync(), isTrue);
+      expect(dash.readAsStringSync(), contains(newRef));
+      expect(oldSnap, isNot(contains(newRef)));
+    });
+
+    test('a node with no drift in the run is reported, not silently approved',
+        () async {
+      final runPath = runJsonWith(
+          const Artifact(kind: 'tree', description: 'root=Scaffold'));
+      final (code, output) = await _run(
+          ['approve', graphDir, runPath, '--node', 'shop.dashboard']);
+      expect(code, 1);
+      expect(output, contains('no drift to approve'));
+    });
   });
 
   test('graph stats reports counts and the module', () async {

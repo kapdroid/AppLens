@@ -42,6 +42,7 @@ class AppLensCli {
       ..addCommand(_ReportCommand(_out))
       ..addCommand(_InitCommand(_out))
       ..addCommand(_RunCommand(_out))
+      ..addCommand(_ApproveCommand(_out))
       ..addCommand(_TriageCommand(_out,
           provider: _triageProvider, commits: _triageCommits))
       ..addCommand(_AuthorCommand(_out, provider: _authorProvider))
@@ -313,6 +314,116 @@ class _ReportCommand extends _Base {
     out.writeln('✓ wrote $outPath');
     // Triage is advisory: the exit code reflects the run only (ARCHITECTURE.md §9).
     return exitCodeForRun(record);
+  }
+}
+
+/// Promotes a drifted capture/snapshot from a run into the node's approved
+/// baseline on disk — the local, no-GitHub equivalent of approving a baseline
+/// proposal. It writes the new golden/snapshot and swaps the hash in the node's
+/// YAML, then leaves the change for the human to review (`git diff`) and commit:
+/// this *is* the human-approval step of the proposal mechanism (CLAUDE.md), not
+/// a run silently rewriting the graph.
+class _ApproveCommand extends _Base {
+  _ApproveCommand(super.out) {
+    argParser.addOption('node',
+        help: 'The node id whose drift to approve.', mandatory: true);
+  }
+  @override
+  String get name => 'approve';
+  @override
+  String get description =>
+      'Promote a run\'s drifted capture/snapshot into the node\'s approved '
+      'baseline on disk (local approve — review the diff, then commit).';
+
+  @override
+  Future<int> run() async {
+    final rest = argResults!.rest;
+    if (rest.length < 2) {
+      out.writeln('usage: applens approve <qa_graph> <run.json> --node <id>');
+      return 64;
+    }
+    final dir = rest[0];
+    final graph = _load(dir, out);
+    if (graph == null) {
+      return 1;
+    }
+    final record = _loadRunJson(rest[1], out);
+    if (record == null) {
+      return 1;
+    }
+    final nodeId = argResults!.option('node')!;
+    final node = graph.byId[nodeId];
+    if (node == null || node.source == null) {
+      out.writeln('no node "$nodeId" with a source file in the graph');
+      return 1;
+    }
+    // The drift evidence for the node — a tier-3 'capture' (new golden) and/or a
+    // tier-2.5 'structural' (new snapshot), recorded content-addressed.
+    final artifacts = [
+      for (final visit in record.visits)
+        if (visit.expectedNodeId == nodeId)
+          for (final a in visit.artifacts)
+            if ((a.kind == 'capture' || a.kind == 'structural') &&
+                a.bytes != null)
+              a,
+    ];
+    if (artifacts.isEmpty) {
+      out.writeln('no drift to approve for "$nodeId" in ${rest[1]}');
+      return 1;
+    }
+
+    // node.source.source is the path loadGraph read the node from.
+    final file = File(node.source!.source);
+    var yaml = file.readAsStringSync();
+    final changes = <String>[];
+    for (final artifact in artifacts) {
+      final newRef = artifact.description; // sha256:<hex>
+      final hex = newRef.substring('sha256:'.length);
+      if (artifact.kind == 'capture') {
+        final old = _approvedImage(node);
+        if (old == null) {
+          out.writeln('"$nodeId" has no approved visual baseline to update');
+          return 1;
+        }
+        File('$dir/goldens/$hex.png')
+          ..parent.createSync(recursive: true)
+          ..writeAsBytesSync(artifact.bytes!);
+        yaml = yaml.replaceAll(old, newRef);
+        changes.add('golden $old → $newRef');
+      } else {
+        final old = _approvedSnapshot(node);
+        if (old == null) {
+          out.writeln(
+              '"$nodeId" has no approved structural baseline to update');
+          return 1;
+        }
+        File('$dir/structural/$hex.json')
+          ..parent.createSync(recursive: true)
+          ..writeAsBytesSync(artifact.bytes!);
+        yaml = yaml.replaceAll(old, newRef);
+        changes.add('snapshot $old → $newRef');
+      }
+    }
+    file.writeAsStringSync(yaml);
+    out
+      ..writeln('✓ approved "$nodeId" in ${node.source!.source}:')
+      ..writeln('  ${changes.join('\n  ')}')
+      ..writeln('review with `git diff` and commit to record the baseline.');
+    return 0;
+  }
+
+  String? _approvedImage(Node node) {
+    for (final b in node.payload.visualBaselines) {
+      if (b.state == BaselineState.approved) return b.image;
+    }
+    return null;
+  }
+
+  String? _approvedSnapshot(Node node) {
+    for (final b in node.payload.structuralBaselines) {
+      if (b.state == BaselineState.approved) return b.snapshot;
+    }
+    return null;
   }
 }
 
