@@ -9,7 +9,9 @@ import 'package:args/command_runner.dart';
 import 'package:yaml/yaml.dart';
 
 import 'git_commits.dart';
+import 'shell.dart';
 import 'templates.dart';
+import 'term.dart';
 
 /// The AppLens command-line entrypoint. Output is injected so commands are
 /// testable headless; each command returns a process exit code. [triageProvider]
@@ -32,16 +34,29 @@ class AppLensCli {
   final LlmProvider? _authorProvider;
 
   Future<int> run(List<String> args) async {
+    // No subcommand (or `start`) → the interactive shell (the claude-style
+    // session); an explicit command keeps the one-shot path for CI, scripts,
+    // and `--help`.
+    if (args.isEmpty || (args.length == 1 && args.first == 'start')) {
+      return _runInteractive();
+    }
+    return _runOnce(args);
+  }
+
+  Future<int> _runOnce(List<String> args) async {
     final runner = CommandRunner<int>(
       'applens',
       'Graph-based autonomous QA for Flutter.',
     )
+      ..argParser.addFlag('no-color',
+          negatable: false, help: 'Disable colored output.')
       ..addCommand(_ValidateCommand(_out))
       ..addCommand(_PlanCommand(_out))
       ..addCommand(_GraphCommand(_out))
       ..addCommand(_ReportCommand(_out))
       ..addCommand(_InitCommand(_out))
       ..addCommand(_RunCommand(_out))
+      ..addCommand(_AllCommand(_out))
       ..addCommand(_ApproveCommand(_out))
       ..addCommand(_TriageCommand(_out,
           provider: _triageProvider, commits: _triageCommits))
@@ -53,6 +68,15 @@ class AppLensCli {
       _out.writeln(error.message);
       return 64;
     }
+  }
+
+  Future<int> _runInteractive() {
+    final shell = Shell(
+      out: _out,
+      style: Style.forSink(_out),
+      dispatch: _runOnce,
+    );
+    return shell.repl();
   }
 }
 
@@ -139,9 +163,135 @@ LlmProvider? _buildLlmProvider(
   return ClaudeProvider(apiKey: key, model: args.option('model')!);
 }
 
+/// The `flutter drive` args that run the on-device entrypoint; the entrypoint
+/// reads the dart-defines to compile the plan, so one host runs any strategy.
+List<String> _flutterDriveArgs({
+  required String entrypoint,
+  required String strategy,
+  required String seed,
+  required String soakSteps,
+  String? device,
+}) =>
+    [
+      'drive',
+      '--driver=test_driver/integration_test.dart',
+      '--target=$entrypoint',
+      '--dart-define=APPLENS_STRATEGY=$strategy',
+      '--dart-define=APPLENS_SEED=$seed',
+      '--dart-define=APPLENS_SOAK_STEPS=$soakSteps',
+      if (device != null) ...['-d', device],
+    ];
+
+/// The adb permission grants from applens.yaml, pre-granted so native dialogs
+/// never appear mid-walk (ARCHITECTURE.md §7/§10).
+List<List<String>> _permissionGrants(_RunConfig config) => [
+      for (final permission in config.permissions)
+        ['shell', 'pm', 'grant', config.appId, permission],
+    ];
+
+/// Reads app id + permissions from applens.yaml (defaults when absent).
+_RunConfig _readRunConfig(String path) {
+  final file = File(path);
+  if (!file.existsSync()) {
+    return const _RunConfig('<applicationId>', []);
+  }
+  final doc = loadYaml(file.readAsStringSync());
+  if (doc is! YamlMap) {
+    return const _RunConfig('<applicationId>', []);
+  }
+  final permissions = doc['permissions'];
+  return _RunConfig(
+    doc['app_id']?.toString() ?? '<applicationId>',
+    permissions is YamlList
+        ? [for (final item in permissions) item.toString()]
+        : const [],
+  );
+}
+
+/// Pre-grants permissions, then walks the plan on the device via `flutter
+/// drive`, forwarding its output live (Process.start, not the buffered
+/// Process.run) so the terminal shows progress. Returns the flutter exit code.
+Future<int> _driveDevice({
+  required StringSink out,
+  required Style style,
+  required List<List<String>> grants,
+  required List<String> flutterArgs,
+  required String device,
+}) async {
+  for (final grant in grants) {
+    await Process.run('adb', ['-s', device, ...grant]);
+  }
+  final proc = await Process.start('flutter', flutterArgs,
+      runInShell: Platform.isWindows);
+  final outDone = proc.stdout
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())
+      .forEach((line) => out.writeln(style.dim(line)));
+  final errDone = proc.stderr
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())
+      .forEach((line) => out.writeln(style.warn(line)));
+  final code = await proc.exitCode;
+  await outDone;
+  await errDone;
+  return code;
+}
+
+/// Renders [record] to [outPath] and returns the verdict exit code (0 green /
+/// 1 red / 2 pending). Shared by `report` and `all`.
+int _writeReport({
+  required StringSink out,
+  required Style style,
+  required RunRecord record,
+  required Graph graph,
+  required String outPath,
+  TriageReport? triage,
+}) {
+  File(outPath)
+      .writeAsStringSync(renderRunReport(record, graph, triage: triage));
+  out.writeln(style.ok('✓ wrote $outPath'));
+  // Triage is advisory (ARCHITECTURE.md §9): the exit code reflects the run.
+  return exitCodeForRun(record);
+}
+
+/// Loads an optional triage.json. Returns `(true, null)` when [path] is null,
+/// `(false, null)` on a missing/malformed file (after explaining why), and
+/// `(true, report)` on success — the graceful-load contract of [_loadRunJson].
+(bool, TriageReport?) _loadTriage(String? path, StringSink out) {
+  if (path == null) {
+    return (true, null);
+  }
+  if (!File(path).existsSync()) {
+    out.writeln('no triage file: $path');
+    return (false, null);
+  }
+  try {
+    final decoded = jsonDecode(File(path).readAsStringSync());
+    if (decoded is! Map) {
+      out.writeln('triage file $path is not a JSON object');
+      return (false, null);
+    }
+    return (true, TriageReport.fromMap(decoded.cast<String, Object?>()));
+  } on FormatException catch (error) {
+    out.writeln('triage file $path is not valid JSON: ${error.message}');
+    return (false, null);
+  } on TypeError {
+    out.writeln('triage file $path is missing required triage fields');
+    return (false, null);
+  } on ArgumentError {
+    out.writeln('triage file $path has an invalid value');
+    return (false, null);
+  }
+}
+
 abstract class _Base extends Command<int> {
   _Base(this.out);
   final StringSink out;
+
+  /// Colored-output styler — on only for a real terminal (off when piped/CI/
+  /// `NO_COLOR`/`--no-color`, and whenever `out` isn't `stdout`, e.g. tests).
+  Style get style =>
+      Style.forSink(out, noColorFlag: globalResults?.flag('no-color') ?? false);
 
   String? requirePositional(String usage) {
     final rest = argResults!.rest;
@@ -177,8 +327,8 @@ class _ValidateCommand extends _Base {
     final errors = diagnostics.where((d) => d.isError).length;
     out.writeln(
       errors == 0
-          ? '✓ valid (${graph.nodes.length} nodes)'
-          : '✗ $errors error(s)',
+          ? style.ok('✓ valid (${graph.nodes.length} nodes)')
+          : style.fail('✗ $errors error(s)'),
     );
     return errors == 0 ? 0 : 1;
   }
@@ -212,7 +362,8 @@ class _PlanCommand extends _Base {
       return 1;
     }
     if (validateGraph(graph).any((d) => d.isError)) {
-      out.writeln('✗ graph does not validate; fix it before planning');
+      out.writeln(
+          style.fail('✗ graph does not validate; fix it before planning'));
       return 1;
     }
     final strategy = PlanStrategy.fromYaml(argResults!.option('strategy')!);
@@ -233,7 +384,7 @@ class _PlanCommand extends _Base {
       out.write(yaml);
     } else {
       File(outPath).writeAsStringSync(yaml);
-      out.writeln('✓ wrote $outPath');
+      out.writeln(style.ok('✓ wrote $outPath'));
     }
     return 0;
   }
@@ -279,41 +430,19 @@ class _ReportCommand extends _Base {
         return 1; // _loadRunDb already explained why
       }
     }
-    TriageReport? triage;
-    final triagePath = argResults!.option('triage');
-    if (triagePath != null) {
-      if (!File(triagePath).existsSync()) {
-        out.writeln('no triage file: $triagePath');
-        return 1;
-      }
-      // A hand-edited/truncated triage.json must fail cleanly, not with a stack
-      // trace — same graceful-load contract as the run file above.
-      try {
-        final decoded = jsonDecode(File(triagePath).readAsStringSync());
-        if (decoded is! Map) {
-          out.writeln('triage file $triagePath is not a JSON object');
-          return 1;
-        }
-        triage = TriageReport.fromMap(decoded.cast<String, Object?>());
-      } on FormatException catch (error) {
-        out.writeln('triage file $triagePath is not valid JSON: '
-            '${error.message}');
-        return 1;
-      } on TypeError {
-        out.writeln(
-            'triage file $triagePath is missing required triage fields');
-        return 1;
-      } on ArgumentError {
-        out.writeln('triage file $triagePath has an invalid value');
-        return 1;
-      }
+    final (triageOk, triage) = _loadTriage(argResults!.option('triage'), out);
+    if (!triageOk) {
+      return 1;
     }
     final outPath = argResults!.option('out')!;
-    File(outPath)
-        .writeAsStringSync(renderRunReport(record, graph, triage: triage));
-    out.writeln('✓ wrote $outPath');
-    // Triage is advisory: the exit code reflects the run only (ARCHITECTURE.md §9).
-    return exitCodeForRun(record);
+    return _writeReport(
+      out: out,
+      style: style,
+      record: record,
+      graph: graph,
+      outPath: outPath,
+      triage: triage,
+    );
   }
 }
 
@@ -426,7 +555,7 @@ class _ApproveCommand extends _Base {
     }
     file.writeAsStringSync(yaml);
     out
-      ..writeln('✓ approved "$nodeId" in ${node.source!.source}:')
+      ..writeln(style.ok('✓ approved "$nodeId" in ${node.source!.source}:'))
       ..writeln('  ${changes.join('\n  ')}')
       ..writeln('review with `git diff` and commit to record the baseline.');
     return 0;
@@ -506,8 +635,8 @@ class _TriageCommand extends _Base {
     final outPath = argResults!.option('out')!;
     File(outPath).writeAsStringSync(
         const JsonEncoder.withIndent('  ').convert(report.toMap()));
-    out.writeln('✓ triaged ${report.verdicts.length} failure(s), '
-        '${report.proposals.length} proposal(s) → $outPath');
+    out.writeln(style.ok('✓ triaged ${report.verdicts.length} failure(s), '
+        '${report.proposals.length} proposal(s) → $outPath'));
     // Advisory (ARCHITECTURE.md §9): triage never changes the run verdict.
     // `applens report` still owns the pass/fail exit code.
     return 0;
@@ -561,8 +690,8 @@ class _InitCommand extends _Base {
       file.writeAsStringSync(entry.value);
       out.writeln('created: ${entry.key}');
     }
-    out.writeln(
-        '✓ initialized — edit the entrypoint import, then `applens run qa_graph`');
+    out.writeln(style.ok(
+        '✓ initialized — edit the entrypoint import, then `applens run qa_graph`'));
     return 0;
   }
 }
@@ -602,70 +731,40 @@ class _RunCommand extends _Base {
       out.writeln('✗ graph does not validate');
       return 1;
     }
-    final config = _readConfig('$dir/applens.yaml');
-    final entrypoint = argResults!.option('entrypoint')!;
+    final config = _readRunConfig('$dir/applens.yaml');
     final device = argResults!.option('device');
-
-    // Pre-grant permissions at session start (ARCHITECTURE.md §7/§10) so native
-    // dialogs never appear. Android uses `adb pm grant` with the app id from
-    // applens.yaml; iOS (`simctl privacy grant`) is part of the walking-skeleton
-    // handoff, not yet wired.
-    final grants = [
-      for (final permission in config.permissions)
-        ['shell', 'pm', 'grant', config.appId, permission],
-    ];
-    for (final grant in grants) {
-      out.writeln('adb ${grant.join(' ')}');
-    }
+    final grants = _permissionGrants(config);
     // `flutter drive` runs the entrypoint ON the device and returns the run
     // record to the host (build/applens/run.json) via the integration_test
     // driver's responseData — no adb pull, no on-device SQLite needed.
-    final flutterArgs = [
-      'drive',
-      '--driver=test_driver/integration_test.dart',
-      '--target=$entrypoint',
-      // The entrypoint reads these to compile the plan on-device, so the same
-      // host runs smoke/regression/impact or a seeded soak.
-      '--dart-define=APPLENS_STRATEGY=${argResults!.option('strategy')}',
-      '--dart-define=APPLENS_SEED=${argResults!.option('seed')}',
-      '--dart-define=APPLENS_SOAK_STEPS=${argResults!.option('soak-steps')}',
-      if (device != null) ...['-d', device],
-    ];
-    out.writeln('flutter ${flutterArgs.join(' ')}');
+    final flutterArgs = _flutterDriveArgs(
+      entrypoint: argResults!.option('entrypoint')!,
+      strategy: argResults!.option('strategy')!,
+      seed: argResults!.option('seed')!,
+      soakSteps: argResults!.option('soak-steps')!,
+      device: device,
+    );
+    for (final grant in grants) {
+      out.writeln(style.dim('adb ${grant.join(' ')}'));
+    }
+    out.writeln(style.dim('flutter ${flutterArgs.join(' ')}'));
 
     if (argResults!.flag('dry-run')) {
       return 0;
     }
     if (device == null) {
-      out.writeln('✗ --device is required to run on an emulator/device');
+      out.writeln(
+          style.fail('✗ --device is required to run on an emulator/device'));
       return 64;
     }
-    for (final grant in grants) {
-      await Process.run('adb', ['-s', device, ...grant]);
-    }
-    final result = await Process.run('flutter', flutterArgs);
-    out
-      ..writeln(result.stdout)
-      ..writeln(result.stderr);
-    return result.exitCode == 0 ? 0 : 1;
-  }
-
-  _RunConfig _readConfig(String path) {
-    final file = File(path);
-    if (!file.existsSync()) {
-      return const _RunConfig('<applicationId>', []);
-    }
-    final doc = loadYaml(file.readAsStringSync());
-    if (doc is! YamlMap) {
-      return const _RunConfig('<applicationId>', []);
-    }
-    final permissions = doc['permissions'];
-    return _RunConfig(
-      doc['app_id']?.toString() ?? '<applicationId>',
-      permissions is YamlList
-          ? [for (final item in permissions) item.toString()]
-          : const [],
+    final code = await _driveDevice(
+      out: out,
+      style: style,
+      grants: grants,
+      flutterArgs: flutterArgs,
+      device: device,
     );
+    return code == 0 ? 0 : 1;
   }
 }
 
@@ -673,6 +772,144 @@ class _RunConfig {
   const _RunConfig(this.appId, this.permissions);
   final String appId;
   final List<String> permissions;
+}
+
+/// The one-command pipeline: validate → device walk (the four-tier oracle, so
+/// both the semantic and visual screen comparisons run) → render the report →
+/// open it → exit with the report's verdict (0 green / 1 red / 2 pending).
+/// Defaults to regression. `--no-walk` re-renders the last run without walking.
+class _AllCommand extends _Base {
+  _AllCommand(super.out) {
+    argParser
+      ..addOption('strategy', defaultsTo: 'regression')
+      ..addOption('seed', defaultsTo: '0')
+      ..addOption('soak-steps', defaultsTo: '40')
+      ..addOption('entrypoint',
+          defaultsTo: 'integration_test/applens_entry.dart')
+      ..addOption('device',
+          help: 'Target device id (`flutter -d`). Required for the walk.')
+      ..addOption('out', defaultsTo: 'build/applens/report.html')
+      ..addOption('run-json', defaultsTo: 'build/applens/run.json')
+      ..addOption('triage',
+          help:
+              'A triage.json (from `applens triage`) to fold into the report.')
+      ..addFlag('no-open',
+          negatable: false, help: 'Do not open the report when done.')
+      ..addFlag('no-walk',
+          negatable: false,
+          help: 'Skip the device walk; render the existing run.json.')
+      ..addFlag('dry-run',
+          help: 'Print the pipeline without touching a device.');
+  }
+  @override
+  String get name => 'all';
+  @override
+  String get description =>
+      'Validate → walk on a device → report → open, exiting with the verdict.';
+
+  @override
+  Future<int> run() async {
+    final dir = requirePositional(
+        'all <qa_graph> --device <id> [--strategy] [--no-open] [--no-walk]');
+    if (dir == null) {
+      return 64;
+    }
+    final s = style;
+    final outPath = argResults!.option('out')!;
+    final runJson = argResults!.option('run-json')!;
+    final graph = _load(dir, out);
+    if (graph == null) {
+      return 1;
+    }
+
+    if (!argResults!.flag('no-walk')) {
+      out.writeln(s.step('▸ [1/5] validate'));
+      if (validateGraph(graph).any((d) => d.isError)) {
+        out.writeln(s.fail('✗ graph does not validate; fix it before running'));
+        return 1;
+      }
+      out.writeln(s.ok('✓ valid (${graph.nodes.length} nodes)'));
+
+      final strategy = argResults!.option('strategy')!;
+      out.writeln(s.step('▸ [2/5] plan ($strategy)'));
+
+      out.writeln(s.step('▸ [3/5] device walk'));
+      final device = argResults!.option('device');
+      final grants = _permissionGrants(_readRunConfig('$dir/applens.yaml'));
+      final flutterArgs = _flutterDriveArgs(
+        entrypoint: argResults!.option('entrypoint')!,
+        strategy: strategy,
+        seed: argResults!.option('seed')!,
+        soakSteps: argResults!.option('soak-steps')!,
+        device: device,
+      );
+      for (final grant in grants) {
+        out.writeln(s.dim('adb ${grant.join(' ')}'));
+      }
+      out.writeln(s.dim('flutter ${flutterArgs.join(' ')}'));
+      if (argResults!.flag('dry-run')) {
+        return 0;
+      }
+      if (device == null) {
+        out.writeln(
+            s.fail('✗ --device is required to run on an emulator/device'));
+        return 64;
+      }
+      final code = await _driveDevice(
+        out: out,
+        style: s,
+        grants: grants,
+        flutterArgs: flutterArgs,
+        device: device,
+      );
+      if (code != 0 && !File(runJson).existsSync()) {
+        out.writeln(s.fail('✗ device walk failed (flutter exit $code); '
+            'no $runJson — not rendering a report'));
+        return 1;
+      }
+    }
+
+    out.writeln(s.step('▸ [4/5] report'));
+    if (!File(runJson).existsSync()) {
+      out.writeln(s.fail('✗ no run record at $runJson — cannot render'));
+      return 1;
+    }
+    final (triageOk, triage) = _loadTriage(argResults!.option('triage'), out);
+    if (!triageOk) {
+      return 1;
+    }
+    final record = _loadRunJson(runJson, out);
+    if (record == null) {
+      return 1;
+    }
+    final verdict = _writeReport(
+      out: out,
+      style: s,
+      record: record,
+      graph: graph,
+      outPath: outPath,
+      triage: triage,
+    );
+
+    out.writeln(s.step('▸ [5/5] open'));
+    if (!argResults!.flag('no-open') && stdout.hasTerminal) {
+      await openInBrowser(outPath, out, s);
+    } else {
+      out.writeln(s.dim('(skipped — '
+          '${argResults!.flag('no-open') ? '--no-open' : 'not a terminal'})'));
+    }
+
+    switch (verdict) {
+      case 0:
+        out.writeln(s.ok('✓ GREEN — all assertions passed'));
+      case 2:
+        out.writeln(
+            s.warn('⚠ PENDING — baselines awaiting approval; see $outPath'));
+      default:
+        out.writeln(s.fail('✗ RED — see $outPath'));
+    }
+    return verdict;
+  }
 }
 
 class _AuthorCommand extends _Base {
@@ -723,8 +960,8 @@ class _AuthorCommand extends _Base {
     }
     final outPath = argResults!.option('out')!;
     File(outPath).writeAsStringSync(writeYaml(graph.toMap()));
-    out.writeln('✓ drafted ${graph.nodes.length} node(s) → $outPath '
-        '(review, refine, and open a PR)');
+    out.writeln(style.ok('✓ drafted ${graph.nodes.length} node(s) → $outPath '
+        '(review, refine, and open a PR)'));
     return 0;
   }
 }
@@ -774,7 +1011,8 @@ class _CrawlCommand extends _Base {
       return 0;
     }
     if (device == null) {
-      out.writeln('✗ --device is required to crawl on an emulator/device');
+      out.writeln(
+          style.fail('✗ --device is required to crawl on an emulator/device'));
       return 64;
     }
     final result = await Process.run('flutter', flutterArgs);
@@ -934,7 +1172,7 @@ class _GraphShowCommand extends _Base {
     final html = '<!doctype html><meta charset="utf-8"><body>$svg</body>';
     final outPath = argResults!.option('out') ?? 'graph_${rest[1]}.html';
     File(outPath).writeAsStringSync(html);
-    out.writeln('✓ wrote $outPath');
+    out.writeln(style.ok('✓ wrote $outPath'));
     return 0;
   }
 }

@@ -400,6 +400,115 @@ void main() {
     expect(output, contains('flutter drive'));
   });
 
+  group('all', () {
+    test('--dry-run prints every step and the device command, exit 0',
+        () async {
+      final (code, output) = await _run(
+          ['all', _qaGraph, '--device', 'emulator-5554', '--dry-run']);
+      expect(code, 0);
+      expect(output, contains('[1/5] validate'));
+      expect(output, contains('✓ valid'));
+      expect(output, contains('[2/5] plan (regression)')); // default strategy
+      expect(output, contains('[3/5] device walk'));
+      expect(output, contains('flutter drive'));
+      expect(output, isNot(contains('[4/5] report'))); // dry-run stops at walk
+    });
+
+    test('--strategy overrides the regression default in the echoed args',
+        () async {
+      final (_, output) =
+          await _run(['all', _qaGraph, '--strategy', 'smoke', '--dry-run']);
+      expect(output, contains('APPLENS_STRATEGY=smoke'));
+    });
+
+    test('without --device (not dry-run) exits 64', () async {
+      final (code, output) = await _run(['all', _qaGraph]);
+      expect(code, 64);
+      expect(output, contains('--device is required'));
+    });
+
+    test('fails fast on an invalid graph (exit 1, device untouched)', () async {
+      final tmp = Directory.systemTemp.createTempSync('applens_all_bad_');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      final graphDir = '${tmp.path}/qa_graph';
+      _copyDir(Directory(_qaGraph), Directory(graphDir));
+      // Point an edge at a non-existent node → a dangling-edge validation error.
+      final node = File('$graphDir/modules/shop/nodes/dashboard.yaml');
+      node.writeAsStringSync(node
+          .readAsStringSync()
+          .replaceFirst('target: catalog', 'target: nope'));
+      final (code, output) = await _run(['all', graphDir, '--device', 'x']);
+      expect(code, 1);
+      expect(output, contains('does not validate'));
+    });
+
+    group('--no-walk renders an existing run.json and returns the verdict', () {
+      late Directory tmp;
+      late String graphDir;
+      setUp(() {
+        tmp = Directory.systemTemp.createTempSync('applens_all_');
+        graphDir = '${tmp.path}/qa_graph';
+        _copyDir(Directory(_qaGraph), Directory(graphDir));
+      });
+      tearDown(() => tmp.deleteSync(recursive: true));
+
+      String runJsonWith(NodeOutcome outcome) {
+        final run = RunRecord(
+          id: 'run',
+          strategy: 'regression',
+          graphHash: 'h',
+          seed: 0,
+          visits: [
+            NodeVisit(
+              step: 0,
+              expectedNodeId: 'shop.dashboard',
+              matchedNodeId: 'shop.dashboard',
+              outcome: outcome,
+            ),
+          ],
+        );
+        final path = '${tmp.path}/run.json';
+        File(path).writeAsStringSync(jsonEncode(run.toMap()));
+        return path;
+      }
+
+      Future<(int, String)> render(NodeOutcome outcome) => _run([
+            'all', graphDir, '--no-walk', '--no-open', //
+            '--run-json', runJsonWith(outcome),
+            '--out', '${tmp.path}/report.html',
+          ]);
+
+      test('green run → exit 0 + GREEN banner', () async {
+        final (code, output) = await render(NodeOutcome.passed);
+        expect(code, 0);
+        expect(output, contains('✓ wrote'));
+        expect(output, contains('GREEN'));
+        expect(File('${tmp.path}/report.html').existsSync(), isTrue);
+      });
+
+      test('red run → exit 1 + RED banner', () async {
+        final (code, output) = await render(NodeOutcome.failedSoft);
+        expect(code, 1);
+        expect(output, contains('RED'));
+      });
+
+      test('pending run → exit 2 + PENDING banner', () async {
+        final (code, output) = await render(NodeOutcome.pending);
+        expect(code, 2);
+        expect(output, contains('PENDING'));
+      });
+
+      test('a missing run.json is reported, not rendered', () async {
+        final (code, output) = await _run([
+          'all', graphDir, '--no-walk', '--no-open', //
+          '--run-json', '${tmp.path}/absent.json',
+        ]);
+        expect(code, 1);
+        expect(output, contains('no run record'));
+      });
+    });
+  });
+
   test('triage writes verdicts + proposals from an injected provider',
       () async {
     final tmp = Directory.systemTemp.createTempSync('applens_triage_');
