@@ -41,17 +41,41 @@ dart run applens_cli:applens init                 # writes qa_graph/, applens.ya
 #    then validate it (fingerprint ambiguity is a hard error):
 dart run applens_cli:applens validate qa_graph
 
-# 3. Compile a plan (smoke = tagged-node coverage; regression = every edge):
+# 3. Compile a plan (smoke = tagged-node coverage; regression = every edge;
+#    impact = only the screens a diff touched; soak = a seeded random long walk):
 dart run applens_cli:applens plan qa_graph --strategy smoke --out build/applens/plan.yaml
 
-# 4. Run it on a booted emulator/device (pre-grants permissions, walks the plan,
-#    records outcomes to a SQLite run store):
-dart run applens_cli:applens run qa_graph --strategy smoke
+# 4. Run it on a booted emulator/device (--device is required on-device; it
+#    pre-grants permissions, walks the plan through the four-tier oracle —
+#    widget tree, layout hash, semantic text+alignment, visual golden — and
+#    serializes the run to build/applens/run.json):
+dart run applens_cli:applens run qa_graph --strategy smoke --device emulator-5554
 
-# 5. Render the static HTML report (exit 0 green / 1 red / 2 pending):
-dart run applens_cli:applens report qa_graph build/applens/run.db --out build/applens/report.html
+# 5. Render the static HTML report (exit 0 green / 1 red / 2 pending). A failed
+#    node shows a self-locating message + a labeled-box highlight of what moved
+#    or changed:
+dart run applens_cli:applens report qa_graph build/applens/run.json --out build/applens/report.html
 open build/applens/report.html
 ```
+
+### Approving an intended change (the local baseline loop)
+
+When a visual or text/alignment change is intentional, the run reds and records
+the drifted capture/snapshot. Promote it into the node's approved baseline on
+disk, review the diff, and commit — no GitHub round-trip:
+
+```bash
+dart run applens_cli:applens approve qa_graph build/applens/run.json --node shop.dashboard
+git diff   # the one-line baseline swap + the new golden/snapshot
+```
+
+### State-based screens and guards (Tier 1, opt-in)
+
+A node's identity can key on app *state* (`flags: { cart_count: ">0" }`) and a
+precondition (`guards: { requires: [journey.started] }`). At zero integration
+the runner infers flags from the UI; add `applens_sdk` and record state with
+`AppLensState.setFlag(...)` (compiled out of release builds) for precise,
+state-distinguished identity.
 
 ### Navigating a large graph
 
