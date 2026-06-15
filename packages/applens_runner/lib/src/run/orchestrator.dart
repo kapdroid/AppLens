@@ -223,9 +223,10 @@ class Orchestrator {
     // Tier 2.5 (semantic): diff the node's recorded text + geometry against the
     // live tree, scoped by its `watch` hint. Deterministic and gating; the
     // evidence screenshot is best-effort. First reach only (canonical state).
-    if (!_anyFailed(assertions) &&
-        structuralBaselines != null &&
-        !_semanticEvaluated.contains(expected)) {
+    // Unlike the costlier tier 3, this runs even when a cheaper tier already
+    // failed — its job is to *localize* the change (the annotated highlight), so
+    // a node that fails tier 1/2 still gets a labeled box where it broke.
+    if (structuralBaselines != null && !_semanticEvaluated.contains(expected)) {
       final sb = _approvedStructuralFor(node);
       if (sb != null) {
         _semanticEvaluated.add(expected);

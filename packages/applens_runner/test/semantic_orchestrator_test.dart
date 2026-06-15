@@ -136,6 +136,41 @@ void main() {
     expect(semantic.skipped, isTrue);
   });
 
+  test('still annotates as evidence when a cheaper tier already failed',
+      () async {
+    // tier-1 text_equals fails first (the fingerprint carries no text), but the
+    // semantic tier must still run to localize the change with an annotated box.
+    final node = Node(
+      id: 'S',
+      identity: const NodeIdentity(route: '/s', anchors: ['lbl']),
+      payload: NodePayload(
+        assertions: const [
+          Assertion(type: 'widget_exists', args: {'key': 'lbl'}),
+          Assertion(
+              type: 'text_equals', args: {'key': 'lbl', 'value': 'Welcome'}),
+        ],
+        structuralBaselines: [_approvedBaseline()],
+      ),
+    );
+    final graph = Graph(nodes: [node], entryNodeIds: ['S']);
+    final orch = Orchestrator(
+      driver: FakeDriver(
+          trees: [_liveTree('Start')],
+          capture: Capture(pngBytes: _png(100, 100), width: 100, height: 100)),
+      fingerprints: _ScriptedFingerprints(
+          const Fingerprint(route: '/s', anchors: {'lbl'})),
+      store: InMemoryRunStore(),
+      structuralBaselines: _FixedStructural(_baselineSnap('Start shopping')),
+    );
+    final record = await orch.run(graph, _plan());
+    final visit = record.visits.single;
+    expect(visit.outcome, NodeOutcome.failedSoft);
+    expect(visit.assertions.any((a) => a.type == 'text_equals' && !a.passed),
+        isTrue);
+    // The semantic tier ran despite the tier-1 failure and attached the box.
+    expect(visit.artifacts.where((a) => a.kind == 'annotated'), hasLength(1));
+  });
+
   test('watch.keys scopes the tier: an unwatched text change does not fail',
       () async {
     // Watch only "other"; the changed widget is "lbl" → no finding.
