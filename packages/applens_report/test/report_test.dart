@@ -86,12 +86,12 @@ void main() {
 
     final html = renderRunReport(run, _graph);
     expect(html, contains('node coverage: 2/2'));
-    expect(
-      html,
-      contains('modules/shop/nodes/cart.yaml:payload.assertions[0]'),
-    );
+    // Self-locating: the node file + the failing assertion both appear.
+    expect(html, contains('modules/shop/nodes/cart.yaml'));
+    expect(html, contains('btn_place_order')); // the failing assertion detail
     expect(html, contains('<svg'));
-    expect(html, contains('#b00020')); // failing node highlighted red
+    // The failing node is highlighted via a theme-driven class, not inline hex.
+    expect(html, contains('al-node--failed'));
   });
 
   test('embeds an annotated highlight image for a semantic failure', () {
@@ -327,5 +327,114 @@ void main() {
     final html = renderRunReport(run, _graph);
     expect(html, isNot(contains('triage:')));
     expect(html, isNot(contains('Triage clusters')));
+  });
+
+  test('renders a verdict banner, flows, and steps-to-reproduce', () {
+    const run = RunRecord(
+      id: 'r',
+      strategy: 'smoke',
+      graphHash: 'h',
+      seed: 0,
+      visits: [
+        NodeVisit(
+          step: 0,
+          expectedNodeId: 'shop.dashboard',
+          matchedNodeId: 'shop.dashboard',
+          outcome: NodeOutcome.passed,
+        ),
+        NodeVisit(
+          step: 1,
+          flow: 1,
+          expectedNodeId: 'shop.dashboard',
+          matchedNodeId: 'shop.dashboard',
+          outcome: NodeOutcome.passed,
+        ),
+        NodeVisit(
+          step: 2,
+          flow: 1,
+          expectedNodeId: 'shop.cart',
+          matchedNodeId: 'shop.cart',
+          outcome: NodeOutcome.failedSoft,
+          assertions: [
+            AssertionResult(
+                tierOrder: 30,
+                type: 'visual_match',
+                passed: false,
+                detail: '84% differ'),
+          ],
+        ),
+      ],
+    );
+    final html = renderRunReport(run, _graph);
+    expect(html, contains('class="banner red"'));
+    expect(html, contains('✗ RED'));
+    expect(html, contains('<h2>Flows</h2>'));
+    expect(html, contains('failed at shop.cart')); // the broken flow is marked
+    expect(html, contains('Steps to reproduce'));
+    expect(html, contains('84% differ')); // the reason in the failing step
+  });
+
+  test(
+      'renders per-screen tabs with the visual comparison and a no-baseline '
+      'note', () {
+    final run = RunRecord(
+      id: 'r',
+      strategy: 'smoke',
+      graphHash: 'h',
+      seed: 0,
+      visits: [
+        NodeVisit(
+          step: 0,
+          expectedNodeId: 'shop.dashboard',
+          matchedNodeId: 'shop.dashboard',
+          outcome: NodeOutcome.passed,
+          assertions: const [
+            AssertionResult(tierOrder: 30, type: 'visual_match', passed: true),
+          ],
+          artifacts: [
+            Artifact(
+              kind: 'visual_baseline',
+              description: 'sha256:aa',
+              bytes: Uint8List.fromList(const [137, 80, 78, 71]),
+            ),
+          ],
+        ),
+        const NodeVisit(
+          step: 1,
+          expectedNodeId: 'shop.cart',
+          matchedNodeId: 'shop.cart',
+          outcome: NodeOutcome.passed,
+        ),
+      ],
+    );
+    final html = renderRunReport(run, _graph);
+    expect(html, contains('<h2>Screens</h2>'));
+    expect(html, contains('class="tabs"'));
+    expect(html, contains('data:image/png;base64,')); // the baseline thumbnail
+    expect(html, contains('No approved baseline')); // cart has none
+  });
+
+  test('supports light and dark themes (auto + toggle), no inline node hex',
+      () {
+    const run = RunRecord(
+      id: 'r',
+      strategy: 'smoke',
+      graphHash: 'h',
+      seed: 0,
+      visits: [
+        NodeVisit(
+          step: 0,
+          expectedNodeId: 'shop.dashboard',
+          matchedNodeId: 'shop.dashboard',
+          outcome: NodeOutcome.passed,
+        ),
+      ],
+    );
+    final html = renderRunReport(run, _graph);
+    expect(html, contains('@media(prefers-color-scheme:dark)'));
+    expect(html, contains('data-theme'));
+    expect(html, contains('alToggleTheme'));
+    expect(html, contains('al-node{')); // svg styled by class, from tokens
+    expect(html, isNot(contains('fill="#'))); // no inline hex fills on nodes
   });
 }

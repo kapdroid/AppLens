@@ -591,6 +591,11 @@ void main() {
 
       expect(record.visits[1].outcome, NodeOutcome.passed);
       expect(tier3(record.visits[1]).passed, isTrue);
+      // A passing visit now carries the approved golden as evidence, so the
+      // report can show the screen's visual comparison even on a green run.
+      final baselineArt = record.visits[1].artifacts
+          .where((a) => a.kind == 'visual_baseline' && a.bytes != null);
+      expect(baselineArt, hasLength(1));
     });
 
     test('a drifted baseline is a soft fail carrying the diff PNG', () async {

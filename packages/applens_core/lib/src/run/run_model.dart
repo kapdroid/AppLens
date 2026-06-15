@@ -88,11 +88,18 @@ class NodeVisit {
     required this.expectedNodeId,
     required this.matchedNodeId,
     required this.outcome,
+    this.flow = 0,
     this.assertions = const [],
     this.artifacts = const [],
   });
 
   final int step;
+
+  /// The plan path (flow) this visit belongs to — its index in `plan.paths`.
+  /// Stamped by the runner so the report can group visits into flows reliably,
+  /// even across reroutes/blocked steps that change a flow's visit count.
+  final int flow;
+
   final String expectedNodeId;
 
   /// The node actually matched; null when nothing known matched.
@@ -108,6 +115,7 @@ class NodeVisit {
 
   Map<String, Object?> toMap() => {
         'step': step,
+        'flow': flow,
         'expected_node_id': expectedNodeId,
         'matched_node_id': matchedNodeId,
         'outcome': outcome.name,
@@ -117,6 +125,7 @@ class NodeVisit {
 
   factory NodeVisit.fromMap(Map<String, Object?> map) => NodeVisit(
         step: map['step']! as int,
+        flow: map['flow'] as int? ?? 0,
         expectedNodeId: map['expected_node_id']! as String,
         matchedNodeId: map['matched_node_id'] as String?,
         outcome: NodeOutcome.values.byName(map['outcome']! as String),

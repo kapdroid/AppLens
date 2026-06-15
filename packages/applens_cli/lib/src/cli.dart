@@ -1169,7 +1169,8 @@ class _GraphShowCommand extends _Base {
       return 1;
     }
     final svg = renderModule(graph, rest[1]);
-    final html = '<!doctype html><meta charset="utf-8"><body>$svg</body>';
+    final html = '<!doctype html><meta charset="utf-8">'
+        '<style>$graphSvgCss</style><body>$svg</body>';
     final outPath = argResults!.option('out') ?? 'graph_${rest[1]}.html';
     File(outPath).writeAsStringSync(html);
     out.writeln(style.ok('✓ wrote $outPath'));

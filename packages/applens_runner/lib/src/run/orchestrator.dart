@@ -84,9 +84,10 @@ class Orchestrator {
     _semanticEvaluated.clear();
     final visits = <NodeVisit>[];
     var step = 0;
-    for (final path in plan.paths) {
+    for (var flow = 0; flow < plan.paths.length; flow++) {
+      final path = plan.paths[flow];
       try {
-        step = await _walk(graph, plan, path, visits, step);
+        step = await _walk(graph, plan, path, visits, step, flow);
       } on Exception catch (error) {
         // A path's walk should contain its own per-node faults, but an
         // unrecoverable one (e.g. the app tore down its widget tree, or there is
@@ -96,6 +97,7 @@ class Orchestrator {
         final nextStep = visits.isEmpty ? step : visits.last.step + 1;
         visits.add(NodeVisit(
           step: nextStep,
+          flow: flow,
           expectedNodeId: path.start,
           matchedNodeId: null,
           outcome: NodeOutcome.failedHard,
@@ -128,6 +130,7 @@ class Orchestrator {
     PlanPath path,
     List<NodeVisit> visits,
     int startStep,
+    int flow,
   ) async {
     var step = startStep;
 
@@ -151,6 +154,7 @@ class Orchestrator {
       visits.add(
         NodeVisit(
           step: step++,
+          flow: flow,
           expectedNodeId: path.start,
           matchedNodeId: matchNode(entryFingerprint, graph),
           outcome: NodeOutcome.failedHard,
@@ -161,7 +165,7 @@ class Orchestrator {
     } else {
       visits.add(
         await _evaluate(
-            graph, path.start, entryFingerprint, step++, path.start),
+            graph, path.start, entryFingerprint, step++, path.start, flow),
       );
     }
     // Mirror the app's Navigator stack as we walk, so a `back` step is matched
@@ -172,6 +176,7 @@ class Orchestrator {
         visits.add(
           NodeVisit(
             step: step++,
+            flow: flow,
             expectedNodeId: planStep.to,
             matchedNodeId: null,
             outcome: NodeOutcome.blocked,
@@ -202,7 +207,7 @@ class Orchestrator {
       if (!actionFailed && matched == expected) {
         _advanceNav(nav, planStep);
         visits.add(
-          await _evaluate(graph, expected, fingerprint, step++, expected),
+          await _evaluate(graph, expected, fingerprint, step++, expected, flow),
         );
         continue;
       }
@@ -213,6 +218,7 @@ class Orchestrator {
       visits.add(
         NodeVisit(
           step: step++,
+          flow: flow,
           expectedNodeId: expected,
           matchedNodeId: matched,
           outcome: NodeOutcome.failedHard,
@@ -220,7 +226,7 @@ class Orchestrator {
         ),
       );
       final reroutedStep =
-          await _reroute(graph, plan, expected, visits, step, nav);
+          await _reroute(graph, plan, expected, visits, step, nav, flow);
       if (reroutedStep == null) {
         blocked = true;
       } else {
@@ -246,6 +252,7 @@ class Orchestrator {
     Fingerprint fingerprint,
     int step,
     String matched,
+    int flow,
   ) async {
     final node = graph.byId[expected]!;
     // Guard preconditions first (cheapest): an unmet `requires` flag is a
@@ -291,7 +298,15 @@ class Orchestrator {
               watch: node.payload.watch ?? const WatchSpec(),
             );
             assertions.add(semanticResult(findings));
-            if (findings.isNotEmpty) {
+            if (findings.isEmpty) {
+              // Clean pass: attach the approved snapshot as evidence so the
+              // report can show this screen's semantic comparison even on green.
+              extraArtifacts.add(Artifact(
+                kind: 'structural_baseline',
+                description: baselineSnap.key,
+                bytes: utf8.encode(jsonEncode(baselineSnap.toMap())),
+              ));
+            } else {
               // The drifted snapshot itself, content-addressed — the would-be
               // baseline `applens approve` promotes if the change is intended
               // (mirrors the tier-3 'capture' artifact).
@@ -333,13 +348,25 @@ class Orchestrator {
         _tier3Evaluated.add(expected);
         try {
           final capture = await driver.capture(deriveCaptureScope(node));
+          final baselineBytes = await baselines!.load(baseline);
           final result = evaluateTier3(
             actual: capture,
-            baselinePng: await baselines!.load(baseline),
+            baselinePng: baselineBytes,
             comparator: _comparatorFor(baseline),
           );
           if (result.assertion.passed || result.assertion.skipped) {
             assertions.add(result.assertion);
+            // On a clean pass, attach the approved golden as evidence so the
+            // report shows this screen's visual comparison even on green.
+            if (result.assertion.passed &&
+                !result.assertion.skipped &&
+                baselineBytes != null) {
+              extraArtifacts.add(Artifact(
+                kind: 'visual_baseline',
+                description: baseline.image ?? node.id,
+                bytes: baselineBytes,
+              ));
+            }
           } else {
             // Drift from the approved baseline. Matching an open proposal is
             // pending (yellow), not a regression (ARCHITECTURE.md §9).
@@ -400,6 +427,7 @@ class Orchestrator {
     final failed = _anyFailed(assertions);
     return NodeVisit(
       step: step,
+      flow: flow,
       expectedNodeId: expected,
       matchedNodeId: matched,
       outcome: failed
@@ -408,7 +436,11 @@ class Orchestrator {
               ? NodeOutcome.pending
               : NodeOutcome.passed,
       assertions: assertions,
-      artifacts: failed ? [...await _artifacts(), ...extraArtifacts] : const [],
+      // Passing visits keep their evidence artifacts (the approved baseline
+      // images) so the report can render every compared screen, not just
+      // failures; the tier-0 tree/log dump stays failure-only.
+      artifacts:
+          failed ? [...await _artifacts(), ...extraArtifacts] : extraArtifacts,
     );
   }
 
@@ -492,6 +524,7 @@ class Orchestrator {
     List<NodeVisit> visits,
     int startStep,
     NavStack nav,
+    int flow,
   ) async {
     var step = startStep;
     for (final alternate
@@ -524,7 +557,8 @@ class Orchestrator {
         for (final replayedStep in alternate.steps) {
           _advanceNav(nav, replayedStep);
         }
-        visits.add(await _evaluate(graph, target, fingerprint, step++, target));
+        visits.add(
+            await _evaluate(graph, target, fingerprint, step++, target, flow));
         return step;
       }
     }

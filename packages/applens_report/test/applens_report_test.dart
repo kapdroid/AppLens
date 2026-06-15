@@ -3,6 +3,6 @@ import 'package:test/test.dart';
 
 void main() {
   test('report schema version is defined', () {
-    expect(reportSchemaVersion, 0);
+    expect(reportSchemaVersion, 1);
   });
 }

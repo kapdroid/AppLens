@@ -42,7 +42,7 @@ String renderGraphSvg(
       final to = center(edge.target);
       edges.write(
         '<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" '
-        'stroke="#999" stroke-width="1"/>',
+        'class="al-edge"/>',
       );
     }
   }
@@ -50,15 +50,16 @@ String renderGraphSvg(
   final boxes = StringBuffer();
   for (final id in ids) {
     final p = topLeft[id]!;
-    final fill = failedIds.contains(id) ? '#f8d7da' : '#e7f1ff';
-    final stroke = id == focusId ? '#b00020' : '#5b8def';
-    final strokeWidth = id == focusId ? 3 : 1;
+    // Theme-driven via CSS classes (styled from page tokens), so nodes are
+    // legible in both light and dark mode — see [graphSvgCss].
+    final cls = StringBuffer('al-node');
+    if (failedIds.contains(id)) cls.write(' al-node--failed');
+    if (id == focusId) cls.write(' al-node--focus');
     boxes.write(
       '<rect x="${p.x}" y="${p.y}" width="$boxW" height="$boxH" rx="6" '
-      'fill="$fill" stroke="$stroke" stroke-width="$strokeWidth"/>'
+      'class="$cls"/>'
       '<text x="${p.x + boxW / 2}" y="${p.y + boxH / 2 + 4}" '
-      'text-anchor="middle" font-family="monospace" font-size="11">'
-      '${escapeXml(id)}</text>',
+      'text-anchor="middle" class="al-label">${escapeXml(id)}</text>',
     );
   }
 
@@ -95,6 +96,33 @@ String renderNeighborhood(
   }
   return renderGraphSvg(graph, ids, focusId: focusId, failedIds: failedIds);
 }
+
+/// CSS variable definitions for the graph SVG, light by default with a dark
+/// override via `prefers-color-scheme`. The report redefines these same vars in
+/// its own token block (so its theme toggle controls them); a standalone
+/// `graph show` page includes these directly.
+const String graphSvgTokens = ':root{'
+    '--al-edge:#9aa0a6;--al-node-bg:#e7f1ff;--al-node-stroke:#5b8def;'
+    '--al-node-fail-bg:#f8d7da;--al-node-fail-stroke:#b00020;'
+    '--al-node-focus:#b00020;--al-label:#1b2733}'
+    '@media(prefers-color-scheme:dark){:root{'
+    '--al-edge:#5f6368;--al-node-bg:#1b2a3a;--al-node-stroke:#4a7fb5;'
+    '--al-node-fail-bg:#3a1e1e;--al-node-fail-stroke:#e57373;'
+    '--al-node-focus:#e57373;--al-label:#d7dde3}}';
+
+/// The class → token rules for graph SVG elements. The report includes these;
+/// the token values come from whichever token block the page defines.
+const String graphSvgRules = '.al-edge{stroke:var(--al-edge);stroke-width:1}'
+    '.al-node{fill:var(--al-node-bg);stroke:var(--al-node-stroke);'
+    'stroke-width:1}'
+    '.al-node--failed{fill:var(--al-node-fail-bg);'
+    'stroke:var(--al-node-fail-stroke)}'
+    '.al-node--focus{stroke:var(--al-node-focus);stroke-width:3}'
+    '.al-label{fill:var(--al-label);font-family:monospace;font-size:11px}';
+
+/// Self-contained graph SVG stylesheet (tokens + rules) for standalone pages
+/// like `applens graph show`.
+const String graphSvgCss = '$graphSvgTokens$graphSvgRules';
 
 /// Minimal XML escaping for text embedded in SVG/HTML. Escapes both quote forms
 /// so untrusted run data (node ids, commit messages, LLM reasoning) can't break
